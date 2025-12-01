@@ -600,12 +600,73 @@ Trong phần cơ bản của CFM, đặc biệt là khi sử dụng Independent 
 Ngoài ra, do hàm được mạng nơ-ron học $u_\phi(t,x)$ sao cho nó xấp xỉ $u(t, x)$ (trường vector biên).
 Tuy nhiên, $u(t, x)$ được định nghĩa là kỳ vọng (tích phân) của các trường vector có điều kiện: $u_t(x) = \mathbb{E}[u_t(x|z)]$, nên tại các vùng không gian mà các đường $u_t(x|z)$ có phương sai lớn, mạng nơ-ron sẽ có xu hướng học giá trị trung bình và làm "mờ" đi độ chính xác, chi tiết của flow, dẫn đến chất lượng sinh mẫu có thể bị ảnh hưởng.
 
-#### 4.3. Coupling
+### 4.3. Coupling
 
-### 4.4. Discrete Flow Matching
+Trong các phương pháp Flow Matching cơ bản, việc xác định đường đi xác suất thường dựa trên các ghép cặp ngẫu nhiên hoặc độc lập giữa mẫu nguồn và mẫu đích. Việc ghép cặp này được gọi là "Coupling". Việc ghép cặp này cũng là một bài toán khó đối với Flow matching.
+
+#### 4.3.1. Từ One-sided đến Two-sided Interpolation (Nội suy một phía và hai phía)
+
+Trước khi đi vào Coupling, cần xem xét lại cách xây dựng trường vector có điều kiện:
+
+* **One-sided Conditioning (Điều kiện hóa một phía):**
+    Phương pháp truyền thống xây dựng đường đi xác suất $p_t(x_t)$ bằng cách biên (marginalising) qua điểm dữ liệu $x_1$.
+    Công thức:
+    $$p_t(x_t) = \int p_t(x_t \mid x_1) q(x_1) dx_1$$
+    Ví dụ điển hình là sử dụng phân phối Gaussian: $p(x_t \mid x_1) = \mathcal{N}(x_t \mid x_1, (1-t)^2)$. Đây là cách tiếp cận đơn giản nhưng hạn chế khả năng kiểm soát điểm khởi đầu.
+
+* **Two-sided Conditioning (Điều kiện hóa hai phía):**
+    Để tổng quát hóa, ta có thể điều kiện hóa trên cả hai điểm đầu mút của quá trình, gọi là biến ẩn $z = (x_1, x_0)$, trong đó $x_1$ là dữ liệu và $x_0$ là nhiễu.
+    Đường đi xác suất biên được định nghĩa là:
+    $$p_t(x_t) = \int p_t(x_t \mid x_1, x_0) q(x_1, x_0) dx_1 dx_0$$
+    
+    Trong trường hợp nội suy tuyến tính xác định (deterministic linear interpolation), ta có:
+    $$x_t = (1-t)x_0 + t x_1$$
+    Việc lựa chọn phân phối ghép cặp $q(x_1, x_0)$ đóng vai trò quyết định đến hình dạng của đường đi (trajectory). Cách đơn giản nhất là giả sử $x_1$ và $x_0$ độc lập: $q(x_1, x_0) = q_1(x_1)q_0(x_0)$ (Independent Coupling).
+
+#### 4.3.2. Optimal Transport (OT) Coupling (Ghép cặp Vận chuyển tối ưu)
+
+Để giải quyết vấn đề đường đi cắt chéo, bài báo đề xuất sử dụng Optimal Transport Coupling thay vì ghép cặp ngẫu nhiên. Ý tưởng cốt lõi là ghép $x_0$ và $x_1$ sao cho tổng quãng đường di chuyển là ngắn nhất.
+
+Bài toán được phát biểu dưới dạng tối thiểu hóa chi phí Wasserstein:
+$$q(x_1, x_0) = \pi(x_1, x_0) \in \arg\inf_{\pi \in \Pi} \int \|x_1 - x_0\|_2^2 d\pi(x_1, x_0)$$
+
+
+**Ưu điểm của OT Coupling:**
+* **Không cắt chéo (Non-crossing paths):** Các đường đi thẳng hơn và không cắt nhau, giúp trường vector trơn mượt hơn.
+* **Hiệu quả huấn luyện:** Giảm phương sai trong quá trình huấn luyện (lower training variance).
+* **Tốc độ lấy mẫu:** Do đường đi thẳng hơn (straight paths), bộ giải phương trình vi phân (ODE solver) có thể thực hiện ít bước hơn mà vẫn đạt độ chính xác cao (faster sampling).
 
 ## Tham khảo
 
 1. https://arxiv.org/pdf/2210.02747
 2. https://mlg.eng.cam.ac.uk/blog/2024/01/20/flow-matching.html
 3. https://arxiv.org/abs/2412.06264
+
+
+Dựa trên nội dung từ bài báo "An Introduction to Flow Matching" của Cambridge MLG, dưới đây là phần trình bày chi tiết về mục "Coupling" (Ghép cặp). Nội dung được biên soạn lại theo văn phong khoa học, tuần tự theo cấu trúc bài báo để bạn có thể đưa trực tiếp vào báo cáo.
+
+---
+
+### Báo cáo: Kỹ thuật Coupling trong Flow Matching
+
+**Tổng quan:**
+Trong các phương pháp Flow Matching cơ bản, việc xác định đường đi xác suất (probability path) thường dựa trên các ghép cặp ngẫu nhiên hoặc độc lập giữa nhiễu (noise) và dữ liệu (data). Phần này trình bày cách cải tiến quá trình này thông qua kỹ thuật "Coupling" (Ghép cặp) và "Optimal Transport" (Vận chuyển tối ưu) nhằm tạo ra các trường vector (vector fields) thẳng hơn, giảm thiểu phương sai khi huấn luyện và tăng tốc độ lấy mẫu.
+
+
+
+#### 2. Vấn đề của Independent Coupling
+
+Khi sử dụng ghép cặp độc lập (Independent Coupling), một mẫu nhiễu $x_0$ bất kỳ có thể được ghép với một mẫu dữ liệu $x_1$ bất kỳ.
+* **Hệ quả:** Các đường đi (trajectories) của các điểm khác nhau sẽ cắt chéo nhau (crossing paths) một cách hỗn loạn trong không gian.
+* **Tác động:** Điều này làm cho trường vector trở nên phức tạp, khó học hơn đối với mạng nơ-ron, dẫn đến phương sai huấn luyện cao và quá trình lấy mẫu (sampling) chậm hơn do cần nhiều bước tích phân số hơn.
+
+
+
+#### 5. Kết luận
+
+Việc chuyển từ ghép cặp ngẫu nhiên (Uniform/Independent Sampling) sang ghép cặp tối ưu (OT Coupling) thông qua Mini-batch OT mang lại sự cải thiện rõ rệt:
+* Loại bỏ hiện tượng các đường đi cắt chéo nhau.
+* Đơn giản hóa hình học của trường vector mục tiêu mà mạng nơ-ron cần học.
+* Đã được chứng minh cải thiện hiệu năng thực tế trên nhiều ứng dụng khác nhau.
+
+Phương pháp này cũng mở rộng được cho các loại khoảng cách (metric) khác ngoài Euclidean, ví dụ như căn chỉnh góc quay (rotational alignment) trong mô hình hóa phân tử.
