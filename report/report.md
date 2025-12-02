@@ -632,41 +632,12 @@ $$q(x_1, x_0) = \pi(x_1, x_0) \in \arg\inf_{\pi \in \Pi} \int \|x_1 - x_0\|_2^2 
 
 
 **Ưu điểm của OT Coupling:**
-* **Không cắt chéo (Non-crossing paths):** Các đường đi thẳng hơn và không cắt nhau, giúp trường vector trơn mượt hơn.
-* **Hiệu quả huấn luyện:** Giảm phương sai trong quá trình huấn luyện (lower training variance).
-* **Tốc độ lấy mẫu:** Do đường đi thẳng hơn (straight paths), bộ giải phương trình vi phân (ODE solver) có thể thực hiện ít bước hơn mà vẫn đạt độ chính xác cao (faster sampling).
+* Không cắt chéo (Non-crossing paths): Các đường đi thẳng hơn và không cắt nhau, giúp trường vector trơn mượt hơn.
+* Hiệu quả huấn luyện: Giảm phương sai trong quá trình huấn luyện (lower training variance).
+* Tốc độ lấy mẫu: Do đường đi có thể "thẳng" hơn (do tối ưu chi phí), bộ giải phương trình vi phân (ODE solver) có thể thực hiện ít bước hơn mà vẫn đạt độ chính xác cao (faster sampling).
 
 ## Tham khảo
 
 1. https://arxiv.org/pdf/2210.02747
 2. https://mlg.eng.cam.ac.uk/blog/2024/01/20/flow-matching.html
 3. https://arxiv.org/abs/2412.06264
-
-
-Dựa trên nội dung từ bài báo "An Introduction to Flow Matching" của Cambridge MLG, dưới đây là phần trình bày chi tiết về mục "Coupling" (Ghép cặp). Nội dung được biên soạn lại theo văn phong khoa học, tuần tự theo cấu trúc bài báo để bạn có thể đưa trực tiếp vào báo cáo.
-
----
-
-### Báo cáo: Kỹ thuật Coupling trong Flow Matching
-
-**Tổng quan:**
-Trong các phương pháp Flow Matching cơ bản, việc xác định đường đi xác suất (probability path) thường dựa trên các ghép cặp ngẫu nhiên hoặc độc lập giữa nhiễu (noise) và dữ liệu (data). Phần này trình bày cách cải tiến quá trình này thông qua kỹ thuật "Coupling" (Ghép cặp) và "Optimal Transport" (Vận chuyển tối ưu) nhằm tạo ra các trường vector (vector fields) thẳng hơn, giảm thiểu phương sai khi huấn luyện và tăng tốc độ lấy mẫu.
-
-
-
-#### 2. Vấn đề của Independent Coupling
-
-Khi sử dụng ghép cặp độc lập (Independent Coupling), một mẫu nhiễu $x_0$ bất kỳ có thể được ghép với một mẫu dữ liệu $x_1$ bất kỳ.
-* **Hệ quả:** Các đường đi (trajectories) của các điểm khác nhau sẽ cắt chéo nhau (crossing paths) một cách hỗn loạn trong không gian.
-* **Tác động:** Điều này làm cho trường vector trở nên phức tạp, khó học hơn đối với mạng nơ-ron, dẫn đến phương sai huấn luyện cao và quá trình lấy mẫu (sampling) chậm hơn do cần nhiều bước tích phân số hơn.
-
-
-
-#### 5. Kết luận
-
-Việc chuyển từ ghép cặp ngẫu nhiên (Uniform/Independent Sampling) sang ghép cặp tối ưu (OT Coupling) thông qua Mini-batch OT mang lại sự cải thiện rõ rệt:
-* Loại bỏ hiện tượng các đường đi cắt chéo nhau.
-* Đơn giản hóa hình học của trường vector mục tiêu mà mạng nơ-ron cần học.
-* Đã được chứng minh cải thiện hiệu năng thực tế trên nhiều ứng dụng khác nhau.
-
-Phương pháp này cũng mở rộng được cho các loại khoảng cách (metric) khác ngoài Euclidean, ví dụ như căn chỉnh góc quay (rotational alignment) trong mô hình hóa phân tử.
