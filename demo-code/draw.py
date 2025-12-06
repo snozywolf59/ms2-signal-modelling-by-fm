@@ -9,7 +9,7 @@ class DrawSample:
         plt.xlabel('X')
         plt.ylabel('Y')
         plt.title(title)
-        plt.grid(True)
+        plt.grid(False)
         plt.axis('equal')
         plt.show()
     
@@ -34,10 +34,10 @@ class DrawFlow:
             # kknjknkj
             path = trajectory[:, i, :].cpu().detach().numpy()
             
-            plt.plot(path[:, 0], path[:, 1], color='lightblue', linewidth=2)
+            plt.plot(path[:, 0], path[:, 1], color='lightblue', linewidth=2, zorder=1)
             
-            plt.scatter(path[0, 0], path[0, 1], color='blue', s=50, label='start' if i==0 else "")
-            plt.scatter(path[-1, 0], path[-1, 1], color='darkblue', s=50, label='end' if i==0 else "")
+            plt.scatter(path[0, 0], path[0, 1], color='blue', s=50, label='start' if i==0 else "", zorder=2)
+            plt.scatter(path[-1, 0], path[-1, 1], color='red', s=50, label='end' if i==0 else "", zorder=2)
 
         plt.xlabel('X')
         plt.ylabel('Y')

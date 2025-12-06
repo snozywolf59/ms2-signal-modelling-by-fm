@@ -40,11 +40,34 @@ class GaussSampler:
 
 class CheckerBoardSampler:
     @staticmethod
-    def sample_checkerboard(batch_size):
-        x1 = torch.rand(batch_size) * 4 - 2
-    
-        x2_ = torch.rand(batch_size) - torch.randint(0, 2, (batch_size,)) * 2
-        x2 = (x2_ + (torch.floor(x1) % 2))
+    def sample_checkerboard_region(batch_size, 
+                               min_x=-2, min_y=-2, 
+                               max_x=2, max_y=2, 
+                               tiles=4):
+        # Kích thước mỗi ô
+        cell_w = (max_x - min_x) / tiles
+        cell_h = (max_y - min_y) / tiles
         
-        data = (torch.stack([x1, x2], dim=1) * 2.0 )
-        return data
+        # Chọn ô (i, j) ngẫu nhiên nhưng chỉ lấy ô đen
+        # (i + j) % 2 == 0: ô đen
+        i_list = torch.randint(0, tiles, (batch_size,))
+        j_list = torch.randint(0, tiles, (batch_size,))
+        
+        # Lọc: chỉ giữ ô đen
+        mask = ((i_list + j_list) % 2 == 0)
+        
+        # Nếu thiếu điểm thì lấy thêm
+        while mask.sum() < batch_size:
+            new_i = torch.randint(0, tiles, (batch_size,))
+            new_j = torch.randint(0, tiles, (batch_size,))
+            new_mask = ((new_i + new_j) % 2 == 0)
+            
+            i_list = torch.where(mask, i_list, new_i)
+            j_list = torch.where(mask, j_list, new_j)
+            mask = ((i_list + j_list) % 2 == 0)
+        
+        # Lấy random trong ô
+        x = min_x + i_list * cell_w + torch.rand(batch_size) * cell_w
+        y = min_y + j_list * cell_h + torch.rand(batch_size) * cell_h
+        
+        return torch.stack([x, y], dim=1)
