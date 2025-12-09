@@ -14,11 +14,11 @@ class DrawSample:
         plt.show()
     
     @staticmethod
-    def draw_samples_comparison(data1, data2, title1="Source Samples", title2="Target Samples"):
+    def draw_samples_comparison(data1, data2, title , title1="Source Samples", title2="Target Samples"):
         plt.figure(figsize=(5,5))
         plt.scatter(data1[:, 0], data1[:, 1], color='blue', alpha=0.6, label=title1)
         plt.scatter(data2[:, 0], data2[:, 1], color='red', alpha=0.6, label=title2)
-        plt.title("Source and Target samples")
+        plt.title(title)
         plt.legend()
         plt.show()
         
