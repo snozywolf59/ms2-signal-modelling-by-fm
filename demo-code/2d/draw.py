@@ -41,7 +41,7 @@ class DrawFlow:
 
         plt.xlabel('X')
         plt.ylabel('Y')
-        plt.title('Quá trình dịch chuyển các điểm')
+        # plt.title('Quá trình dịch chuyển các điểm')
         plt.grid(True)
         plt.axis('equal')
         plt.legend()
