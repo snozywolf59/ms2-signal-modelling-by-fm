@@ -5,7 +5,7 @@
 *.cubin
 *.fatbin
 
-/venv/
+/.venv/
 
 /data/
 
@@ -15,3 +15,5 @@ __pycache__/
 
 /.cache/
 /.vscode/
+/.pep2prob/
+/pep2prob-benchmark/
