@@ -14,24 +14,24 @@ def scaled_dot_product_attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tens
     return output, attn
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, num_heads: int, d_in:int):
+    def __init__(self, num_heads: int, d_model:int):
         super().__init__()
-        assert d_in % num_heads == 0, "d_in must be divisible by num_heads"
+        assert d_model % num_heads == 0, "d_model must be divisible by num_heads"
         self.num_heads = num_heads
-        self.d_in = d_in
-        self.d_k = d_in // num_heads
+        self.d_model = d_model
+        self.d_k = d_model // num_heads
         
-        self.W_q = nn.Linear(d_in, d_in)
-        self.W_k = nn.Linear(d_in, d_in)
-        self.W_v = nn.Linear(d_in, d_in)
-        self.W_o = nn.Linear(d_in, d_in)
+        self.W_q = nn.Linear(d_model, d_model)
+        self.W_k = nn.Linear(d_model, d_model)
+        self.W_v = nn.Linear(d_model, d_model)
+        self.W_o = nn.Linear(d_model, d_model)
         
     def split_heads(self, x: torch.Tensor):
         x = x.view(x.size(0), -1, self.num_heads, self.d_k).transpose(1, 2)
         return x
     
     def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, mask=None):
-        # q: batchsize, seqlen, d_in
+        # q: batchsize, seqlen, d_model
         q = self.split_heads(self.W_q(q))
         k = self.split_heads(self.W_k(k)) # batch size, num_heads, seq_len, d_k
         v = self.split_heads(self.W_v(v))        
