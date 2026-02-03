@@ -23,8 +23,27 @@ class Pep2ProbDataSet:
         return len(self.X)
 
     def __getitem__(self, idx):
-        return self.X[idx], self.Y[idx], self.Y_mask[idx], self.X_info.iloc[idx]
+        if isinstance(idx, slice):
+            return [
+                (self.X[i], self.Y[i], self.Y_mask[i], self.X_info.iloc[i])
+                for i in range(*idx.indices(len(self)))
+            ]
+        else:
+            return (
+                self.X[idx],
+                self.Y[idx],
+                self.Y_mask[idx],
+                self.X_info.iloc[idx],
+            )
 
+    def slice(self, start, end):
+        return Pep2ProbDataSet(
+            self.X[start:end],
+            self.Y[start:end],
+            self.Y_mask[start:end],
+            self.X_info.iloc[start:end],
+        )
+    
 class Pep2ProbDataset:
     """
     Class to handle the Pep2Prob dataset.
@@ -125,12 +144,12 @@ class Pep2ProbDataset:
 
             X = filtered_df[['peptide', 'charge']].values
             X_info_df = filtered_df[['precursor_index', 'peptide', 'charge', '#PSM', 'peptide_length']]
-            Y = filtered_df.values[:, 5:]
+            Y = filtered_df.iloc[:, 5:].to_numpy(dtype=np.float32)
 
             # get the mask for Y
             Y_mask = np.zeros(Y.shape, dtype=bool)
             for i, (peptide, charge) in enumerate(X_info_df[['peptide', 'charge']].values):
-                mask = get_ion_mask(len(peptide), charge, self.max_length_input)
+                mask = get_ion_mask(len(peptide), charge, 40)
                 Y_mask[i, :] = mask
 
             # X = np.array([encode_sequence_and_charge(seq, charge) for seq, charge in X_info_df[['peptide', 'charge']].values])

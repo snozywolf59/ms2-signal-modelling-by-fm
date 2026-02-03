@@ -17,3 +17,4 @@ __pycache__/
 /.vscode/
 /.pep2prob/
 /pep2prob-benchmark/
+/.nist/
