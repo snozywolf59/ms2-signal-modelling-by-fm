@@ -1,4 +1,5 @@
 from rich import progress
+import numpy as np
 
 def read_msp(filename):
     """Iterate over MSP spectral library file and return spectra as dicts."""
