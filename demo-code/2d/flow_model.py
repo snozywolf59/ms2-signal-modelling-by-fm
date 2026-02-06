@@ -3,10 +3,10 @@ import torch.nn as nn
 
 # TO HUU BANG
 class MLP(nn.Module):
-    def __init__(self, hidden_dim=8, layers=4):
+    def __init__(self, input_dim=2, hidden_dim=8, layers=4):
         super().__init__()
         self.net = nn.Sequential()
-        self.net.add_module('input', nn.Linear(3, hidden_dim))
+        self.net.add_module('input', nn.Linear(input_dim + 1, hidden_dim))
         self.net.add_module('input_act', nn.SELU())
         for i in range(layers - 2):
             self.net.add_module(f'hidden_{i}', nn.Linear(hidden_dim, hidden_dim))
