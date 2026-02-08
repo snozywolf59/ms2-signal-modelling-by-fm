@@ -3,7 +3,7 @@ import torch.nn as nn
 
 # TO HUU BANG
 class MLP(nn.Module):
-    def __init__(self, input_dim=2, hidden_dim=8, layers=4):
+    def __init__(self, input_dim=2, hidden_dim=8, output_dim=2, layers=4):
         super().__init__()
         self.net = nn.Sequential()
         self.net.add_module('input', nn.Linear(input_dim + 1, hidden_dim))
@@ -11,7 +11,7 @@ class MLP(nn.Module):
         for i in range(layers - 2):
             self.net.add_module(f'hidden_{i}', nn.Linear(hidden_dim, hidden_dim))
             self.net.add_module(f'hidden_act_{i}', nn.SELU())
-        self.net.add_module('output', nn.Linear(hidden_dim, 2))
+        self.net.add_module('output', nn.Linear(hidden_dim, output_dim))
         
     def forward(self, x, t):
         # x: (B, 2), t: (B, 1)
