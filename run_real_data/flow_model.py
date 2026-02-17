@@ -16,17 +16,9 @@ class CFGFlow(nn.Module):
     def step(self, x_t: torch.Tensor, cond:torch.Tensor, t_start: torch.Tensor, t_end: torch.Tensor):
         raise NotImplementedError("CFG Model is not implemented")
     
-    def sample(self, cond: torch.Tensor, batch: int = 32, step:int = 10):
-        x_t = torch.randn(batch, self.noise_dim, device=cond.device)
-        t = torch.zeros(batch, device=cond.device)
-        dt = 1.0 / step
-        for _ in range(step):
-            t_start = t
-            t_end = t + dt
-            x_t = self.step(x_t, cond, t_start, t_end)
-            t = t_end
-        return x_t
-
+    def sample(self, **cond):
+        raise NotImplementedError("CFG Model is not implemented")
+    
 # simple MLP: concat eveything
 ## Model for flow
 class MLP(nn.Module):
@@ -46,39 +38,15 @@ class MLP(nn.Module):
    
 ## apply above MLP for flow model, with conditioning on peptide sequence, charge and time    
 class HCDFlow(CFGFlow):
-    pep_dim = 128
-    time_dim = 32
-    charge_dim = 32
     def __init__(self, noise_dim, pep_dim=128, time_dim=32, charge_dim=32):
         super().__init__(noise_dim)
-        self.noise_dim = noise_dim
-        self.pep_dim = pep_dim
-        self.time_dim = time_dim
-        self.charge_dim = charge_dim
-        self.pep_embedding = nn.Embedding(22, self.pep_dim, padding_idx=0)
-        self.pos_embedding = nn.Parameter(torch.randn(1, 30, pep_dim))
-        self.charge_embedding = nn.Linear(1, self.charge_dim)
-        self.time_embedding = nn.Linear(1, self.time_dim)
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=pep_dim, 
-            nhead=8, 
-            dim_feedforward=512,
-            batch_first=True
-        )
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=2)
-        total_cond_dim = self.pep_dim + self.charge_dim + self.time_dim
-        self.net = MLP(input_dim=total_cond_dim + noise_dim, output_dim=noise_dim, hidden_dim=1024, layers=4)
+        self.cond_embedding = ConditionEmbedding(pep_dim, time_dim, charge_dim)
+        total_cond_dim = pep_dim + charge_dim + time_dim + noise_dim
+        self.net = MLP(input_dim=total_cond_dim, output_dim=noise_dim, hidden_dim=1024, layers=4)
     
     def forward(self, x: torch.Tensor, t: torch.Tensor, pep_seq, charge):
-        time_embs = self.time_embedding(t)
-        charge_embs = self.charge_embedding(charge)
-        
-        pep_embs = self.pep_embedding(pep_seq) + self.pos_embedding
-        
-        p_out = self.transformer(pep_embs)
-        p_cond = p_out.mean(dim=1)
-        cond = torch.cat([time_embs, p_cond, charge_embs], dim=-1)
-        
+        cond = self.cond_embedding(pep_seq, charge=charge, time=t)
+        # print(x.shape, cond.shape)
         return self.net(torch.cat([x, cond], dim=-1))
     
     def step(self, x_t: torch.Tensor, pep_seq, charge, t_start: torch.Tensor, t_end: torch.Tensor):
@@ -88,6 +56,17 @@ class HCDFlow(CFGFlow):
         v_x = self(x_t + self(x_t, t_start, pep_seq, charge) * (t_end - t_start) / 2, t_mid, pep_seq, charge)
         x_next = x_t + v_x * (t_end - t_start)
         return x_next
+    
+    def sample(self,noise, pep_seq, charge, step:int = 10):
+        x_t = noise
+        t = torch.tensor(0.0, device=noise.device)
+        dt = 1.0 / step
+        for _ in range(step):
+            t_start = t
+            t_end = t + dt
+            x_t = self.step(x_t, pep_seq, charge, t_start, t_end)
+            t = t_end
+        return x_t
 
     
 # Deep MLP with residual block and FiLM conditioning
@@ -149,3 +128,14 @@ class HCDFlowResMLP(CFGFlow):
         v_x = self(x_t + self(x_t, t_start, pep_seq, charge) * (t_end - t_start) / 2, t_mid, pep_seq, charge)
         x_next = x_t + v_x * (t_end - t_start)
         return x_next
+
+    def sample(self,noise, pep_seq, charge, step:int = 10):
+        x_t = noise
+        t = torch.tensor(0.0, device=noise.device)
+        dt = 1.0 / step
+        for _ in range(step):
+            t_start = t
+            t_end = t + dt
+            x_t = self.step(x_t, pep_seq, charge, t_start, t_end)
+            t = t_end
+        return x_t
