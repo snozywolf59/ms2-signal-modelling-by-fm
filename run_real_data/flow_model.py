@@ -59,7 +59,7 @@ class HCDFlow(CFGFlow):
     
     def sample(self,noise, pep_seq, charge, step:int = 10):
         x_t = noise
-        t = torch.tensor(0.0, device=noise.device)
+        t = torch.zeros(noise.shape[0], 1, device=noise.device)
         dt = 1.0 / step
         for _ in range(step):
             t_start = t
