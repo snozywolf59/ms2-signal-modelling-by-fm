@@ -129,7 +129,7 @@ class HCDFlowResMLP(CFGFlow):
         x_next = x_t + v_x * (t_end - t_start)
         return x_next
 
-    def sample(self,noise, pep_seq, charge, step:int = 10):
+    def sample(self, noise, pep_seq, charge, step:int = 10):
         x_t = noise
         t = torch.tensor(0.0, device=noise.device)
         dt = 1.0 / step
