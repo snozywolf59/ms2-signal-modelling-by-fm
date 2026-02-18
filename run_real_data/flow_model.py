@@ -112,10 +112,10 @@ class ResMLPWithConditioning(nn.Module):
 
 ## Model for flow with ResMLP and FiLM conditioning
 class HCDFlowResMLP(CFGFlow):
-    def __init__(self, noise_dim, pep_dim=128, time_dim=64, charge_dim=64):
+    def __init__(self, noise_dim, pep_dim=128, time_dim=64, charge_dim=64, num_blocks=8):
         super().__init__(noise_dim)
         self.cond_embedding = ConditionEmbedding(pep_dim, time_dim, charge_dim)
-        self.mlp = ResMLPWithConditioning(noise_dim, pep_dim + time_dim + charge_dim ,num_blocks=8) 
+        self.mlp = ResMLPWithConditioning(noise_dim, pep_dim + time_dim + charge_dim ,num_blocks=num_blocks) 
     
     def forward(self, x: torch.Tensor, t: torch.Tensor, pep_seq, charge):
         cond_emb = self.cond_embedding(pep_seq, charge=charge, time=t)
@@ -129,9 +129,9 @@ class HCDFlowResMLP(CFGFlow):
         x_next = x_t + v_x * (t_end - t_start)
         return x_next
 
-    def sample(self, noise, pep_seq, charge, step:int = 10):
+    def sample(self,noise, pep_seq, charge, step:int = 10):
         x_t = noise
-        t = torch.tensor(0.0, device=noise.device)
+        t = torch.zeros(noise.shape[0], 1, device=noise.device)
         dt = 1.0 / step
         for _ in range(step):
             t_start = t
