@@ -56,7 +56,7 @@ class ConditionEmbedding(nn.Module):
             dim_feedforward=1024,
             batch_first=True
         )
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=2)
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=6)
     
     def forward(self, seq: torch.Tensor, charge: torch.Tensor, time: torch.Tensor):
         pep_emb = self.pep_embedding(seq) + sinusoidal_position_encoding(seq.size(1), self.pep_embedding.embedding_dim).unsqueeze(0)
