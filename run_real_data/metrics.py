@@ -41,3 +41,14 @@ def l1(intensity_1: torch.Tensor, intensity_2: torch.Tensor):
 def l2(intensity_1: torch.Tensor, intensity_2: torch.Tensor):
     intensity_1 = (intensity_1 - intensity_2) ** 2
     return intensity_1.mean().item(), intensity_1.sum(dim=1).max().item()
+
+def sa(intensity_1: torch.Tensor, intensity_2: torch.Tensor):
+    dot_p = (intensity_1 * intensity_2).sum(dim=1)
+    dist_1 = intensity_1.pow(2).sum(dim=1).sqrt()
+    dist_2 = intensity_2.pow(2).sum(dim=1).sqrt()
+    cos = dot_p / (dist_1 * dist_2 + 1e-8)
+    cos = cos.clamp(-1.0, 1.0)
+    
+    sa_values = torch.acos(cos)
+    return sa_values.mean().item(), sa_values.max().item()
+    
