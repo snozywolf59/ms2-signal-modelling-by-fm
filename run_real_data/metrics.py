@@ -32,7 +32,7 @@ def pcc(intensity_1: torch.Tensor, intensity_2: torch.Tensor):
     std_y = torch.sqrt((y ** 2).sum(dim=1))
     pcc = cov / (std_x * std_y + eps)
     
-    return pcc.mean().item(), pcc.max().item()
+    return pcc.mean().item(), pcc.min().item()
 
 def l1(intensity_1: torch.Tensor, intensity_2: torch.Tensor):
     intensity_1 = (intensity_1 - intensity_2).abs()
