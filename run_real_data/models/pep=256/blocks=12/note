@@ -1,0 +1,2 @@
+The models converge at about 4 epochs (4 times process all data).
+The mean loss for a 32-element batch is around 0.046
