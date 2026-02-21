@@ -36,7 +36,7 @@ def pcc(intensity_1: torch.Tensor, intensity_2: torch.Tensor):
 
 def l1(intensity_1: torch.Tensor, intensity_2: torch.Tensor):
     intensity_1 = (intensity_1 - intensity_2).abs()
-    return intensity_1.mean().item(), intensity_1.sum(dim=1).max().item()
+    return intensity_1.sum(dim=1).mean().item(), intensity_1.sum(dim=1).max().item()
 
 def l2(intensity_1: torch.Tensor, intensity_2: torch.Tensor):
     intensity_1 = (intensity_1 - intensity_2) ** 2
