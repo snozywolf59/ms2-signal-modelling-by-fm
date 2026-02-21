@@ -9,6 +9,7 @@ def sinusoidal_time_embedding(t, dim):
     dim: embedding dimension (must be even)
     return: (batch, dim)
     """
+    assert dim % 2 == 0, "Sinusoidal embedding dimension must be division by 2"
     half_dim = dim // 2
     device = t.device
 
@@ -29,7 +30,7 @@ def sinusoidal_position_encoding(seq_len, dim):
     dim: embedding dimension (must be even)
     return: (seq_len, dim)
     """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.get_default_device()
 
     position = torch.arange(seq_len, device=device).float().unsqueeze(1)
     half_dim = dim // 2
