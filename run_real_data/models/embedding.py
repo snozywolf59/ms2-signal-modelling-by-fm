@@ -44,12 +44,19 @@ def sinusoidal_position_encoding(seq_len, dim):
     return pe
 
 class ConcatEmbedding(nn.Module):
-    def __init__(self):
+    def __init__(self, pep_dim, out_dim: 512):
         super().__init__()
+        self.pep_embedding = nn.Embedding(22, pep_dim, padding_idx=0)
+        self.fc = nn.Linear(30 * pep_dim + 2, out_dim)
+        self.act = nn.SiLU()
         
     def forward(self, seq: torch.Tensor, charge: torch.Tensor, time: torch.Tensor):
-        concat_seq = seq.view(seq.size(0), -1)
-        return torch.cat([concat_seq, charge, time])
+        seq_embs = self.pep_embedding(seq)
+        # print(seq_embs.shape)
+        concat_seq = seq_embs.view(seq.size(0), -1)
+        # print(concat_seq.shape, charge.shape)
+        cond = torch.cat([concat_seq, charge, time], dim=-1)
+        return self.act(self.fc(cond))
 
 class TfmEmbedding(nn.Module):
     def __init__(self, pep_dim=128, time_dim=32, charge_dim=32):

@@ -55,10 +55,20 @@ class HCDFlowResMLP(CFGFlow):
         elif embed_type == "pretrain":
             self.cond_embedding = PretrainEmbedding()
         elif embed_type == "concat":
-            self.cond_embedding = ConcatEmbedding()
+            self.cond_embedding = ConcatEmbedding(pep_dim, 2* pep_dim)
         else:
             raise RuntimeError(f"Unimplement error: Embedding type {embed_type} not found.")
-        self.mlp = ResMLPWithConditioning(noise_dim, pep_dim + time_dim + charge_dim ,num_blocks=num_blocks) 
+        if embed_type == "tfm":
+            total_cond_dim = pep_dim + charge_dim + time_dim
+        elif embed_type == "concat":
+            total_cond_dim = 2 * pep_dim
+        else:
+            raise RuntimeError(f"Unimplement error: Embedding type {embed_type} not found.")
+        self.mlp = ResMLPWithConditioning(noise_dim, total_cond_dim ,num_blocks=num_blocks) 
+   
+    @property
+    def condition_embedding(self):
+        return self.cond_embedding
     
     def forward(self, x: torch.Tensor, t: torch.Tensor, pep_seq, charge):
         cond_emb = self.cond_embedding(pep_seq, charge=charge, time=t)
@@ -77,8 +87,8 @@ class HCDFlowResMLP(CFGFlow):
         t = torch.zeros(noise.shape[0], 1, device=noise.device)
         dt = 1.0 / step
         for _ in range(step):
-            t_start = t
+            # t_start = t
             t_end = t + dt
-            x_t = self.step(x_t, pep_seq, charge, t_start, t_end)
+            x_t = self.step(x_t, pep_seq, charge, t, t_end)
             t = t_end
         return x_t
