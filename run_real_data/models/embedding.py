@@ -43,7 +43,15 @@ def sinusoidal_position_encoding(seq_len, dim):
     pe = torch.cat([torch.sin(angles), torch.cos(angles)], dim=1)
     return pe
 
-class ConditionEmbedding(nn.Module):
+class ConcatEmbedding(nn.Module):
+    def __init__(self):
+        super().__init__()
+        
+    def forward(self, seq: torch.Tensor, charge: torch.Tensor, time: torch.Tensor):
+        concat_seq = seq.view(seq.size(0), -1)
+        return torch.cat([concat_seq, charge, time])
+
+class TfmEmbedding(nn.Module):
     def __init__(self, pep_dim=128, time_dim=32, charge_dim=32):
         super().__init__()
         # self.charge_embedding = nn.Linear(1, charge_dim)
@@ -66,4 +74,7 @@ class ConditionEmbedding(nn.Module):
         time_emb = sinusoidal_time_embedding(time, self.time_dim)
         # print(pep_c.shape, charge_emb.shape, time_emb.shape)
         return torch.cat([pep_c, charge_emb, time_emb], dim=-1)
-        
+
+class PretrainEmbedding(nn.Module):
+    def __init__(self):
+        super().__init__()
