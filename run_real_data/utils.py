@@ -1,5 +1,7 @@
 import matplotlib.pyplot as plt
 from time import time
+import numpy as np
+import torch
 
 PROSIT_ALHABET = {
     "A": 1,
@@ -54,9 +56,57 @@ def plot_loss_history(loss_history, smooth_window=None):
     plt.savefig(f"Loss_History_{time()}.jpg")
     plt.show()
 
+def to_numpy(x):
+    try:
+        if isinstance(x, torch.Tensor):
+            return x.detach().cpu().numpy()
+    except ImportError:
+        pass
+    return np.asarray(x)
 
+def plot_intensity(intensity_vector: torch.Tensor, allow_invalid: bool = True):
+    """Plot a Prosit-like intensity
 
-    
-    
-# def plot_intensity(intensity: list):
-    
+    Args:
+        intensity_vector (torch.Tensor): _description_
+        allow_invalid (bool, optional): _description_. Defaults to True.
+
+    Raises:
+        TypeError: _description_
+        ValueError: _description_
+    """
+    if not isinstance(intensity_vector, torch.Tensor):
+        raise TypeError("intensity_vector must be torch.Tensor")
+
+    # convert safely
+    x = intensity_vector.detach().cpu().numpy()
+
+    if x.ndim != 1:
+        raise ValueError("intensity_vector must be 1D")
+
+    indices = np.arange(len(x))
+    valid_mask = x >= 0
+    invalid_mask = x < 0
+
+    plt.figure(figsize=(12, 4))
+
+    if allow_invalid:
+        # plot valid
+        plt.scatter(indices[valid_mask], x[valid_mask], s=15, label="Valid")
+
+        # plot invalid
+        plt.scatter(indices[invalid_mask], x[invalid_mask],
+                    marker='x', s=20, label="Invalid")
+
+        plt.ylim(-1.1, 1.05)
+    else:
+        plt.scatter(indices[valid_mask], x[valid_mask], s=15)
+        plt.ylim(0, 1.05)
+
+    plt.xlabel("Fragment Index")
+    plt.ylabel("Normalized Intensity")
+    plt.title("Fragment Intensity Vector")
+    plt.grid(alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
