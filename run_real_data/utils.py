@@ -1,6 +1,34 @@
 import matplotlib.pyplot as plt
 from time import time
 
+PROSIT_ALHABET = {
+    "A": 1,
+    "C": 2,
+    "D": 3,
+    "E": 4,
+    "F": 5,
+    "G": 6,
+    "H": 7,
+    "I": 8,
+    "K": 9,
+    "L": 10,
+    "M": 11,
+    "N": 12,
+    "P": 13,
+    "Q": 14,
+    "R": 15,
+    "S": 16,
+    "T": 17,
+    "V": 18,
+    "W": 19,
+    "Y": 20,
+    "M(ox)": 21,
+}
+PROSIT_INDEXED_ALPHABET = {i: c for c, i in PROSIT_ALHABET.items()}
+
+def get_peptide_seq(integer_seq):
+    return "".join(PROSIT_INDEXED_ALPHABET[int(i)] for i in integer_seq if i != 0)
+
 def plot_loss_history(loss_history, smooth_window=None):
     """
     Plot training loss history.
@@ -24,3 +52,11 @@ def plot_loss_history(loss_history, smooth_window=None):
     plt.ylabel("Loss")
     plt.title("Training Loss History")
     plt.savefig(f"Loss_History_{time()}.jpg")
+    plt.show()
+
+
+
+    
+    
+# def plot_intensity(intensity: list):
+    
