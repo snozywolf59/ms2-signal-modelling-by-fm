@@ -24,7 +24,6 @@ PROSIT_ALHABET = {
     "V": 18,
     "W": 19,
     "Y": 20,
-    "M(ox)": 21,
 }
 PROSIT_INDEXED_ALPHABET = {i: c for c, i in PROSIT_ALHABET.items()}
 
@@ -64,7 +63,7 @@ def to_numpy(x):
         pass
     return np.asarray(x)
 
-def plot_intensity(intensity_vector: torch.Tensor, allow_invalid: bool = True):
+def plot_intensity(intensity_vector: torch.Tensor | np.ndarray, allow_invalid: bool = True):
     """Plot a Prosit-like intensity
 
     Args:
@@ -75,11 +74,14 @@ def plot_intensity(intensity_vector: torch.Tensor, allow_invalid: bool = True):
         TypeError: _description_
         ValueError: _description_
     """
-    if not isinstance(intensity_vector, torch.Tensor):
+    if not isinstance(intensity_vector, torch.Tensor) and not isinstance(intensity_vector, np.ndarray):
         raise TypeError("intensity_vector must be torch.Tensor")
 
     # convert safely
-    x = intensity_vector.detach().cpu().numpy()
+    if isinstance(intensity_vector, torch.Tensor):
+        x = intensity_vector.detach().cpu().numpy()
+    else:
+        x = intensity_vector
 
     if x.ndim != 1:
         raise ValueError("intensity_vector must be 1D")
@@ -110,3 +112,13 @@ def plot_intensity(intensity_vector: torch.Tensor, allow_invalid: bool = True):
     plt.legend()
     plt.tight_layout()
     plt.show()
+    
+if __name__ == "__main__":
+    import h5py
+    file_path = r"E:\Dai hoc\2526I\dacn\flow-matching\data\traintest_hcd.hdf5"
+    with h5py.File(file_path, "r") as f:
+        print("Keys:", list(f.keys()))
+        intensities_raw = f["intensities_raw"][:1]
+    
+    print(type(intensities_raw[0]))
+    plot_intensity(intensities_raw[0], allow_invalid=False)
