@@ -96,7 +96,7 @@ class ChargeEmbedding(nn.Module):
         return out
 
 class TfmEmbedding(nn.Module):
-    def __init__(self, pep_dim=128, time_dim=32, charge_dim=32, min_charge=2, max_charge=6):
+    def __init__(self, pep_dim=128, time_dim=32, charge_dim=32, min_charge=2, max_charge=6, num_blocks_pep=6):
         super().__init__()
         # self.charge_embedding = nn.Linear(1, charge_dim)
         self.charge_dim = charge_dim
@@ -109,7 +109,7 @@ class TfmEmbedding(nn.Module):
             dim_feedforward=1024,
             batch_first=True
         )
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=6)
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_blocks_pep)
         self.charge_embedding = ChargeEmbedding(min_charge, max_charge, charge_dim)
     
     def forward(self, seq: torch.Tensor, charge: torch.Tensor, time: torch.Tensor):

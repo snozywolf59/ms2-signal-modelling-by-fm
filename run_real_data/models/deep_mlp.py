@@ -48,10 +48,10 @@ class ResMLPWithConditioning(nn.Module):
 
 ## Model for flow with ResMLP and FiLM conditioning
 class HCDFlowResMLP(CFGFlow):
-    def __init__(self, noise_dim, embed_type: Literal["tfm", "pretrain", "concat"]="tfm", pep_dim=128, time_dim=64, charge_dim=64, min_charge=2, max_charge=6, num_blocks=8):
+    def __init__(self, noise_dim, embed_type: Literal["tfm", "pretrain", "concat"]="tfm", pep_dim=128, time_dim=64, charge_dim=64, min_charge=2, max_charge=6, num_blocks=8, num_blocks_pep=6):
         super().__init__(noise_dim)
         if embed_type == "tfm": 
-            self.cond_embedding = TfmEmbedding(pep_dim, time_dim, charge_dim, min_charge, max_charge)
+            self.cond_embedding = TfmEmbedding(pep_dim, time_dim, charge_dim, min_charge, max_charge, num_blocks_pep)
         elif embed_type == "pretrain":
             self.cond_embedding = PretrainEmbedding()
         elif embed_type == "concat":
