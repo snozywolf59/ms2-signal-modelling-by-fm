@@ -63,28 +63,40 @@ def to_numpy(x):
         pass
     return np.asarray(x)
 
-def plot_intensity(intensity_vector: torch.Tensor | np.ndarray, allow_invalid: bool = True):
-    """Plot a Prosit-like intensity
+def plot_intensity(intensity_vector: torch.Tensor | np.ndarray,
+                   peptide,
+                   precursor_charge: int,
+                   allow_invalid: bool = True):
+    """
+    Plot ProteomeTools-style intensity with structural masking.
 
     Args:
-        intensity_vector (torch.Tensor): _description_
-        allow_invalid (bool, optional): _description_. Defaults to True.
-
-    Raises:
-        TypeError: _description_
-        ValueError: _description_
+        intensity_vector (torch.Tensor | np.ndarray): shape (174,)
+        peptide (list | np.ndarray): integer peptide sequence
+        precursor_charge (int): precursor charge
+        allow_invalid (bool): whether to visualize invalid fragments
     """
-    if not isinstance(intensity_vector, torch.Tensor) and not isinstance(intensity_vector, np.ndarray):
-        raise TypeError("intensity_vector must be torch.Tensor")
+
+    if not isinstance(intensity_vector, (torch.Tensor, np.ndarray)):
+        raise TypeError("intensity_vector must be torch.Tensor or np.ndarray")
 
     # convert safely
     if isinstance(intensity_vector, torch.Tensor):
-        x = intensity_vector.detach().cpu().numpy()
+        x = intensity_vector.detach().cpu().numpy().copy()
     else:
-        x = intensity_vector
+        x = intensity_vector.copy()
 
     if x.ndim != 1:
         raise ValueError("intensity_vector must be 1D")
+
+    # create structural mask
+    mask = create_fragment_mask_from_peptide(peptide, precursor_charge)
+
+    if len(x) != len(mask):
+        raise ValueError("Intensity vector must have length 174")
+
+    # mark structural invalid as -1
+    x[mask == 0] = -1
 
     indices = np.arange(len(x))
     valid_mask = x >= 0
@@ -93,10 +105,7 @@ def plot_intensity(intensity_vector: torch.Tensor | np.ndarray, allow_invalid: b
     plt.figure(figsize=(12, 4))
 
     if allow_invalid:
-        # plot valid
         plt.scatter(indices[valid_mask], x[valid_mask], s=15, label="Valid")
-
-        # plot invalid
         plt.scatter(indices[invalid_mask], x[invalid_mask],
                     marker='x', s=20, label="Invalid")
 
@@ -107,18 +116,55 @@ def plot_intensity(intensity_vector: torch.Tensor | np.ndarray, allow_invalid: b
 
     plt.xlabel("Fragment Index")
     plt.ylabel("Normalized Intensity")
-    plt.title("Fragment Intensity Vector")
+    plt.title("Fragment Intensity Vector (Masked)")
     plt.grid(alpha=0.3)
-    plt.legend()
+    if allow_invalid:
+        plt.legend()
     plt.tight_layout()
     plt.show()
     
+def create_fragment_mask_from_peptide(peptide, precursor_charge, 
+                                      max_len=30, max_frag_charge=3):
+    """
+    Create mask for ProteomeTools FI intensity vector (174 dims).
+
+    Args:
+        peptide (list or np.ndarray): integer-encoded peptide sequence
+        precursor_charge (int): precursor charge
+        max_len (int): maximum peptide length (default=30)
+        max_frag_charge (int): maximum fragment charge (default=3)
+
+    Returns:
+        np.ndarray: mask vector of shape (174,)
+    """
+    
+    seq_len = len(peptide)
+    assert seq_len <= max_len
+    assert precursor_charge >= 1
+    
+    n_pos = max_len - 1  # 29
+    mask = np.zeros(2 * max_frag_charge * n_pos)
+    
+    valid_positions = seq_len - 1
+    
+    idx = 0
+    for ion_type in range(2):  # b, y
+        for frag_charge in range(1, max_frag_charge + 1):
+            
+            # fragment charge must not exceed precursor charge
+            if frag_charge <= precursor_charge:
+                mask[idx : idx + valid_positions] = 1
+            
+            idx += n_pos
+    
+    return mask
+
 if __name__ == "__main__":
     import h5py
     file_path = r"E:\Dai hoc\2526I\dacn\flow-matching\data\traintest_hcd.hdf5"
     with h5py.File(file_path, "r") as f:
         print("Keys:", list(f.keys()))
-        intensities_raw = f["intensities_raw"][:1]
+        intensities_raw = f["intensities_raw"][:6]
     
-    print(type(intensities_raw[0]))
-    plot_intensity(intensities_raw[0], allow_invalid=False)
+    print(type(intensities_raw[5]))
+    plot_intensity(torch.tensor(intensities_raw[2], dtype=torch.float64), allow_invalid=True)
