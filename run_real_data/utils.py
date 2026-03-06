@@ -138,25 +138,28 @@ def create_fragment_mask_from_peptide(peptide, precursor_charge,
         np.ndarray: mask vector of shape (174,)
     """
     
-    seq_len = len(peptide)
+    seq_len = np.count_nonzero(peptide) 
     assert seq_len <= max_len
     assert precursor_charge >= 1
-    
-    n_pos = max_len - 1  # 29
+
+    n_pos = max_len - 1
     mask = np.zeros(2 * max_frag_charge * n_pos)
-    
+
     valid_positions = seq_len - 1
-    
+
     idx = 0
-    for ion_type in range(2):  # b, y
-        for frag_charge in range(1, max_frag_charge + 1):
-            
-            # fragment charge must not exceed precursor charge
-            if frag_charge <= precursor_charge:
-                mask[idx : idx + valid_positions] = 1
-            
-            idx += n_pos
-    
+    for pos in range(n_pos):
+
+        pos_valid = pos < valid_positions
+
+        for ion_type in range(2):  # b,y
+            for frag_charge in range(1, max_frag_charge + 1):
+
+                if pos_valid and frag_charge <= precursor_charge:
+                    mask[idx] = 1
+
+                idx += 1
+
     return mask
 
 if __name__ == "__main__":
