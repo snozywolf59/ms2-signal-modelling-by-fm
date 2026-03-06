@@ -113,17 +113,17 @@ for ep in pbar:
                 print(f"Avg loss from last 1000 batch: {(sum(loss_history[-10:-1])/10):.4f}")
     
             # validate batch
-            model.eval()
-            batch_intensities = batch_intensities[0:32]
-            batch_pep_seq = batch_pep_seq[0:32]
-            batch_charge = batch_charge[0:32]
-            noise = torch.randn_like(batch_intensities)
-            
-            generated_batch = model.sample(noise, batch_pep_seq, batch_charge)
-            
-            print(f"PCC test after {ep} epoch: {pcc(generated_batch, batch_intensities)}")
-            print(f"SA test after {ep} epoch: {sa(generated_batch, batch_intensities)}")
-            model.train()
+                model.eval()
+                batch_intensities = batch_intensities[0:32]
+                batch_pep_seq = batch_pep_seq[0:32]
+                batch_charge = batch_charge[0:32]
+                noise = torch.randn_like(batch_intensities)
+                
+                generated_batch = model.sample(noise, batch_pep_seq, batch_charge)
+                
+                print(f"PCC test after {ep} epoch: {pcc(generated_batch, batch_intensities)}")
+                print(f"SA test after {ep} epoch: {sa(generated_batch, batch_intensities)}")
+                model.train()
 
 torch.save(model.state_dict(), f"tfmemb_adalm_{model_layer}_{pep_layer}_{batch_size}_8e.pth")
 
