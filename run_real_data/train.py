@@ -23,11 +23,13 @@ from utils import plot_loss_history
 train_path = r"E:\Dai hoc\2526I\dacn\flow-matching\data\traintest_hcd.hdf5"
 with h5py.File(train_path, "r") as f:
     print("Keys:", list(f.keys()))
-
+    print("Start loading training data")
     seqs = f["sequence_integer"][:]
     charges_oh = f["precursor_charge_onehot"][:]
     intensities = f["intensities_raw"][:]  
-    
+    print("Load data successfully")
+
+print("Formatting Charges...")
 charges = np.argmax(charges_oh, axis=1) + 1
 del charges_oh
 
@@ -40,6 +42,7 @@ for charge in charges:
     
 print(f"Min charge: {min_charge}")
 print(f"Max charge: {max_charge}")
+print("Formatting Charges successfully")
 
 epoch = 6
 batch_size = 512
@@ -49,7 +52,8 @@ pep_layer = 4
 # model_path = r"E:\Dai hoc\2526I\dacn\flow-matching\run_real_data\checkpoints\tfmemb_adaln6_8e.pth"
 model = HCDFlowResMLP(noise_dim=174, pep_dim=256, time_dim=128, charge_dim=9, num_blocks=model_layer, num_blocks_pep=pep_layer, min_charge=min_charge, max_charge=max_charge)
 optimizer = torch.optim.AdamW(model.parameters(), eps=1e-8, lr=2e-4,weight_decay=2e-3)
-# model.load_state_dict(torch.load(model_path))
+
+print(f"Train with: {epoch} epochs with batch size: {batch_size}")
 
 print(f"Num params: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
 loss_history = []
@@ -60,6 +64,7 @@ pbar = tqdm(range(int(epoch)), desc="Training")
 num_samples = len(seqs)
 num_batches = math.ceil(num_samples / batch_size)
 
+print(f"Total batch for 1 epoch is: {num_batches}")
 for ep in pbar:
     model.train()
     
@@ -106,31 +111,19 @@ for ep in pbar:
             })
             if len(loss_history) % 100 == 0:
                 print(f"Avg loss from last 1000 batch: {(sum(loss_history[-10:-1])/10):.4f}")
-        break
     
-    # validate batch
-    model.eval()
-    random_batch_idx = random.randrange(0, num_batches)
-    
-    start = b * batch_size
-    end = min((b + 1) * batch_size, num_samples)
-
-    batch_intensities = torch.tensor(
-        intensities[start:end], dtype=torch.float32
-    )
-    batch_pep_seq = torch.tensor(
-        seqs[start:end], dtype=torch.long
-    )
-    batch_charge = torch.tensor(
-        charges[start:end], dtype=torch.long
-    ).unsqueeze(1)
-    
-    noise = torch.randn_like(batch_intensities)
-    
-    generated_batch = model.sample(noise, batch_pep_seq, batch_charge)
-    
-    print(f"PCC test after {ep} epoch: {pcc(generated_batch, intensities)}")
-    print(f"SA test after {ep} epoch: {pcc(generated_batch, intensities)}")
+            # validate batch
+            model.eval()
+            batch_intensities = batch_intensities[0:32]
+            batch_pep_seq = batch_pep_seq[0:32]
+            batch_charge = batch_charge[0:32]
+            noise = torch.randn_like(batch_intensities)
+            
+            generated_batch = model.sample(noise, batch_pep_seq, batch_charge)
+            
+            print(f"PCC test after {ep} epoch: {pcc(generated_batch, batch_intensities)}")
+            print(f"SA test after {ep} epoch: {sa(generated_batch, batch_intensities)}")
+            model.train()
 
 torch.save(model.state_dict(), f"tfmemb_adalm_{model_layer}_{pep_layer}_{batch_size}_8e.pth")
 
