@@ -37,7 +37,7 @@ def get_peptide_seq(integer_seq):
     )
 
 
-def plot_loss_history(loss_history, smooth_window=None):
+def plot_loss_history(loss_history, prefix="Loss_History", smooth_window=None):
     """
     Plot training loss history.
 
@@ -60,7 +60,7 @@ def plot_loss_history(loss_history, smooth_window=None):
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.title("Training Loss History")
-    plt.savefig(f"Loss_History_{time()}.jpg")
+    plt.savefig(f"{prefix}_{time()}.jpg")
     plt.show()
 
 
