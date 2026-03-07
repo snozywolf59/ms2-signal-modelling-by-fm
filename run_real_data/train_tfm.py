@@ -39,7 +39,7 @@ with h5py.File(train_path, "r") as f:
     charges_oh = f["precursor_charge_onehot"][:]
 
 
-charges = np.argmax(charges_oh, axis=1)
+charges = np.argmax(charges_oh, axis=1) + 1
 del charges_oh
 
 min_charge = 10
@@ -49,8 +49,8 @@ for charge in charges:
     min_charge = min(min_charge, charge)
     max_charge = max(charge, max_charge)
 
-print(f"Min charge: {min_charge + 1}")
-print(f"Max charge: {max_charge + 1}")
+print(f"Min charge: {min_charge}")
+print(f"Max charge: {max_charge}")
 
 epoch = 6
 batch_size = 32
@@ -62,7 +62,7 @@ model = DiffusionFlow(
     d_noise=6, d_model=256, num_layers=model_layer, num_pep_layers=model_layer
 )
 optimizer = torch.optim.AdamW(
-    model.parameters(), eps=1e-8, lr=3e-4, weight_decay=2e-3
+    model.parameters(), eps=1e-8, lr=3e-4, weight_decay=5e-3
 )
 # model.load_state_dict(torch.load(model_path))
 
@@ -86,7 +86,7 @@ with h5py.File(train_path, "r") as f:
         model.train()
 
         for b in range(num_batches):
-
+            print(b)
             optimizer.zero_grad()
             start = b * batch_size
             end = min((b + 1) * batch_size, num_samples)
@@ -96,7 +96,7 @@ with h5py.File(train_path, "r") as f:
             batch_np_charges = charges[start:end]
 
             batch_np_mask = create_batch_fragment_mask_from_peptide(
-                batch_np_seqs, batch_np_charges + 1
+                batch_np_seqs, batch_np_charges
             )
 
             batch_intensities = torch.tensor(
@@ -108,7 +108,7 @@ with h5py.File(train_path, "r") as f:
                 batch_np_charges, dtype=torch.long
             ).unsqueeze(1)
 
-            batch_mask = torch.tensor(batch_np_mask, dtype=torch.float32)
+            batch_mask = torch.tensor(batch_np_mask, dtype=torch.bool)
 
             cur_bs = batch_intensities.shape[0]
 
@@ -123,6 +123,8 @@ with h5py.File(train_path, "r") as f:
             loss = masked_mse_loss(
                 u_pred, batch_intensities - noise, batch_mask
             )
+            if b > 132 * 8:
+                print("after loss", b)
             loss.backward()
             optimizer.step()
 
