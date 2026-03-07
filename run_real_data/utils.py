@@ -2,6 +2,9 @@ import matplotlib.pyplot as plt
 from time import time
 import numpy as np
 import torch
+import torch.nn.functional as F
+
+from typing import Union
 
 PROSIT_ALHABET = {
     "A": 1,
@@ -71,7 +74,7 @@ def to_numpy(x):
 
 
 def plot_intensity(
-    intensity_vector: torch.Tensor | np.ndarray,
+    intensity_vector: Union[torch.Tensor, np.ndarray],
     peptide,
     precursor_charge: int,
     allow_invalid: bool = True,
@@ -180,10 +183,14 @@ def create_fragment_mask_from_peptide(
 
 
 def create_batch_fragment_mask_from_peptide(
-    batch_peptide, batch_precursor_charge, max_len=30, max_frag_charge=3
+    batch_peptide,
+    batch_precursor_charge,
+    max_len=30,
+    max_frag_charge=3,
+    reshape=True,
 ):
     """
-    Create mask for ProteomeTools FI intensity vector (174 dims).
+    Create mask for ProteomeTools FI intensity vector ((max_len-1) * num_frag_charge * 2 dims).
 
     Args:
         peptide (list or np.ndarray): (B, L) integer-encoded peptide sequence
@@ -192,7 +199,7 @@ def create_batch_fragment_mask_from_peptide(
         max_frag_charge (int): maximum fragment charge (default=3)
 
     Returns:
-        np.ndarray: mask vector of shape (174,)
+        np.ndarray: mask vector of shape (B, maxlen, 2*max_frag_charge) or (B, maxlen-1, 2*max_frag_charge)
     """
 
     batch_size = batch_peptide.shape[0]
@@ -215,45 +222,35 @@ def create_batch_fragment_mask_from_peptide(
                         mask[i, idx] = 1
 
                     idx += 1
-
+    if reshape:
+        return mask.reshape(batch_size, max_len - 1, 2 * max_frag_charge)
     return mask
 
 
 def process_intensity_vector(
-    intensity_vector: torch.Tensor | np.array,
-) -> torch.Tensor | np.array:
-    # turn 174 D into (29, 6) with 6 channels: b1, b2, b3, y1, y2, y3
+    intensity_vector: Union[torch.Tensor, np.ndarray],
+) -> Union[torch.Tensor, np.ndarray]:
+    # turn (B, 174)  into (B, 29, 6) with 6 channels: b1, b2, b3, y1, y2, y3
+    batch_size = intensity_vector.shape[0]
     if intensity_vector.shape[-1] != 174:
         raise ValueError("Input vector must have length 174")
 
     if isinstance(intensity_vector, torch.Tensor):
-        return intensity_vector.reshape(29, 6)
+        return intensity_vector.reshape(batch_size, 29, 6)
 
     elif isinstance(intensity_vector, np.ndarray):
-        return intensity_vector.reshape(29, 6)
+        return intensity_vector.reshape(batch_size, 29, 6)
 
     else:
         raise TypeError("Input must be torch.Tensor or np.ndarray")
 
 
 def masked_mse_loss(pred, target, mask):
-    """
-    Compute MSE loss only on valid positions indicated by mask.
-
-    Args:
-        pred (torch.Tensor): predicted intensity vector, shape (batch_size, 29, 6)
-        target (torch.Tensor): true intensity vector, shape (batch_size, 29, 6)
-        mask (torch.Tensor): binary mask indicating valid positions, shape (batch_size, 29, 6)
-
-    Returns:
-        torch.Tensor: masked MSE loss
-    """
     valid_index = mask == 1
     valid_pred = pred[valid_index]
     valid_target = target[valid_index]
 
     if valid_pred.numel() == 0:
-        return torch.tensor(0.0, device=pred.device)
-
-    loss = torch.nn.MSELoss()(valid_pred, valid_target)
+        return torch.tensor(0.0, device=pred.device, requires_grad=True)
+    loss = F.mse_loss(valid_pred, valid_target)
     return loss
