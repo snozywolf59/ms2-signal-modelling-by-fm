@@ -38,12 +38,12 @@ class ReverseNoiseProjection(nn.Module):
 
 
 class TimeEmbedding(nn.Module):
-    def __init__(self, d_in: int, d_out: int):
+    def __init__(self, d_out: int):
         super().__init__()
-        self.d_out = d_out
         self.embedding = nn.Sequential(
-            nn.Linear(d_in, 8), nn.GELU(), nn.Linear(8, d_out)
+            nn.Linear(d_out, 8), nn.GELU(), nn.Linear(8, d_out)
         )
+        self.d_out = d_out
 
     def forward(self, t: torch.Tensor):
         t_emb = sinusoidal_time_embedding(t, self.d_out)
@@ -158,8 +158,8 @@ class DiffusionFlow(nn.Module):
         self.pep_embedding = PepEmbedding(d_model, num_layers=num_pep_layers)
         self.noise_projection = NoiseProjection(d_noise, d_model)
 
-        self.charge_embedding = ChargeEmbedding(1, 4, use_layernorm=False)
-        self.time_embedding = TimeEmbedding(1, 16)
+        self.charge_embedding = ChargeEmbedding(1, 6, use_layernorm=False)
+        self.time_embedding = TimeEmbedding(16)
 
         cond_dim = d_model + 4 + 16
 
@@ -168,7 +168,7 @@ class DiffusionFlow(nn.Module):
                 NoiseDiffusionEncoderLayer(
                     d_model,
                     nhead,
-                    d_model * 4,
+                    d_model,
                     cond_dim,
                 )
                 for _ in range(num_layers)
@@ -218,3 +218,32 @@ class DiffusionFlow(nn.Module):
         out = self.output_proj(x)  # B, 29, d_noise
 
         return out
+
+    def step(
+        self,
+        x_t: torch.Tensor,  # (B,29,6)
+        pep_seq: torch.Tensor,  # (B,L)
+        charge: torch.Tensor,  # (B, 1)
+        t_start: torch.Tensor,  # (B,1)
+        t_end: torch.Tensor,  # (B,1)
+    ):
+        t_mid = (t_start + t_end) / 2
+        dt = (t_end - t_start).view(-1, 1, 1)
+
+        v_start = self(x_t, pep_seq, charge, t_start)
+        x_mid = x_t + v_start * dt / 2
+        v_mid = self(x_mid, pep_seq, charge, t_mid)
+        x_next = x_t + v_mid * dt
+        return x_next
+
+    def sample(self, noise, pep_seq, charge, step: int = 10):
+        x_t = noise  # (B,29,6)
+        B = noise.shape[0]
+        t = torch.zeros(B, 1, device=noise.device)
+        dt = 1.0 / step
+        for _ in range(step):
+            t_end = t + dt
+            x_t = self.step(x_t, pep_seq, charge, t, t_end)
+            t = t_end
+
+        return x_t
