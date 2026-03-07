@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import imageio
 import math
 from tqdm.auto import tqdm
-import random
+from time import time
 
 from gen_path import get_xt
 from metrics import pcc, sa
@@ -53,7 +53,7 @@ print(f"Min charge: {min_charge + 1}")
 print(f"Max charge: {max_charge + 1}")
 
 epoch = 6
-batch_size = 256
+batch_size = 32
 model_layer = 2
 pep_layer = 4
 
@@ -79,97 +79,91 @@ num_batches = math.ceil(num_samples / batch_size)
 
 validate_pcc = []
 validate_sa = []
+start_time = time()
 
-try:
-    with h5py.File(train_path, "r") as f:
-        for ep in pbar:
-            print(ep)
-            model.train()
+with h5py.File(train_path, "r") as f:
+    for ep in pbar:
+        model.train()
 
-            for b in range(num_batches):
+        for b in range(num_batches):
 
-                optimizer.zero_grad()
-                start = b * batch_size
-                end = min((b + 1) * batch_size, num_samples)
+            optimizer.zero_grad()
+            start = b * batch_size
+            end = min((b + 1) * batch_size, num_samples)
 
-                batch_np_intensities = f["intensities_raw"][start:end]
-                batch_np_seqs = f["sequence_integer"][start:end]
-                batch_np_charges = charges[start:end]
+            batch_np_intensities = f["intensities_raw"][start:end]
+            batch_np_seqs = f["sequence_integer"][start:end]
+            batch_np_charges = charges[start:end]
 
-                batch_np_mask = create_batch_fragment_mask_from_peptide(
-                    batch_np_seqs, batch_np_charges + 1
+            batch_np_mask = create_batch_fragment_mask_from_peptide(
+                batch_np_seqs, batch_np_charges + 1
+            )
+
+            batch_intensities = torch.tensor(
+                process_intensity_vector(batch_np_intensities),
+                dtype=torch.float32,
+            )
+            batch_pep_seq = torch.tensor(batch_np_seqs, dtype=torch.long)
+            batch_charge = torch.tensor(
+                batch_np_charges, dtype=torch.long
+            ).unsqueeze(1)
+
+            batch_mask = torch.tensor(batch_np_mask, dtype=torch.float32)
+
+            cur_bs = batch_intensities.shape[0]
+
+            noise = torch.randn_like(batch_intensities)
+            t = torch.rand(cur_bs, 1)
+
+            x_t = get_xt(batch_intensities, noise, t, sigma=1e-6)
+            u_pred = model(
+                noise=x_t, time=t, pep=batch_pep_seq, charge=batch_charge
+            )
+
+            loss = masked_mse_loss(
+                u_pred, batch_intensities - noise, batch_mask
+            )
+            loss.backward()
+            optimizer.step()
+
+            last_100_loss.append(loss.item())
+
+            if len(last_100_loss) == 100:
+                mean_last_100 = sum(last_100_loss) / 100
+                last_100_loss.clear()
+                loss_history.append(mean_last_100)
+
+                pbar.set_postfix(
+                    {
+                        "Last100": f"{mean_last_100:.4f}",
+                        "Avg": f"{(sum(loss_history)/len(loss_history)):.4f}",
+                    }
                 )
+                if len(loss_history) % 10 == 0:
+                    with torch.no_grad():  # validate batch
+                        model.eval()
+                        batch_intensities = batch_intensities[0:32]
+                        batch_pep_seq = batch_pep_seq[0:32]
+                        batch_charge = batch_charge[0:32]
+                        batch_mask = batch_mask[0:32]
+                        noise = torch.randn_like(batch_intensities)
 
-                batch_intensities = torch.tensor(
-                    process_intensity_vector(batch_np_intensities),
-                    dtype=torch.float32,
-                )
-                batch_pep_seq = torch.tensor(batch_np_seqs, dtype=torch.long)
-                batch_charge = torch.tensor(
-                    batch_np_charges, dtype=torch.long
-                ).unsqueeze(1)
-
-                batch_mask = torch.tensor(batch_np_mask, dtype=torch.float32)
-
-                cur_bs = batch_intensities.shape[0]
-
-                noise = torch.randn_like(batch_intensities)
-                t = torch.rand(cur_bs, 1)
-
-                x_t = get_xt(batch_intensities, noise, t, sigma=1e-6)
-                u_pred = model(
-                    noise=x_t, time=t, pep=batch_pep_seq, charge=batch_charge
-                )
-
-                loss = masked_mse_loss(
-                    u_pred, batch_intensities - noise, batch_mask
-                )
-                loss.backward()
-                optimizer.step()
-
-                last_100_loss.append(loss.item())
-
-                if len(last_100_loss) == 100:
-                    mean_last_100 = sum(last_100_loss) / 100
-                    last_100_loss.clear()
-                    loss_history.append(mean_last_100)
-
-                    pbar.set_postfix(
-                        {
-                            "Last100": f"{mean_last_100:.4f}",
-                            "Avg": f"{(sum(loss_history)/len(loss_history)):.4f}",
-                        }
-                    )
-                    if len(loss_history) % 10 == 0:
-                        with torch.no_grad():  # validate batch
-                            model.eval()
-                            batch_intensities = batch_intensities[0:32]
-                            batch_pep_seq = batch_pep_seq[0:32]
-                            batch_charge = batch_charge[0:32]
-                            batch_mask = batch_mask[0:32]
-                            noise = torch.randn_like(batch_intensities)
-
-                            generated_batch = model.sample(
-                                noise, batch_pep_seq, batch_charge
-                            )
-                            score_pcc = pcc(generated_batch, batch_intensities)
-                            score_sa = sa(generated_batch, batch_intensities)
-                            print(f"PCC test after {ep} epoch: {score_pcc}")
-                            print(f"SA test after {ep} epoch: {score_pcc}")
-                            validate_pcc.append(score_pcc[0])
-                            validate_sa.append(score_sa[0])
-                            model.train()
-                    if len(loss_history) % 100 == 0:
-                        print(
-                            f"Avg loss from last 1000 batch: {(sum(loss_history[-10:-1])/10):.4f}"
+                        generated_batch = model.sample(
+                            noise, batch_pep_seq, batch_charge
                         )
+                        score_pcc = pcc(generated_batch, batch_intensities)
+                        score_sa = sa(generated_batch, batch_intensities)
+                        print(f"PCC test after {ep} epoch: {score_pcc}")
+                        print(f"SA test after {ep} epoch: {score_pcc}")
+                        validate_pcc.append(score_pcc[0])
+                        validate_sa.append(score_sa[0])
+                        model.train()
+                if len(loss_history) % 100 == 0:
+                    print(
+                        f"Avg loss from last 1000 batch: {(sum(loss_history[-10:-1])/10):.4f}"
+                    )
 
-
-except RuntimeError as e:
-    print(e)
-    # This forces synchronization so you see the error exactly where it happens
-    torch.cuda.synchronize()
-    raise e
+print(f"Total training time: {time() - start_time} ms")
 torch.save(
     model.state_dict(),
     f"tfm_diffusion_{model_layer}_{pep_layer}_{batch_size}_8e.pth",
