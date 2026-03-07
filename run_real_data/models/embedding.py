@@ -147,6 +147,8 @@ class TfmEmbedding(nn.Module):
 
 class PepEmbedding(nn.Module):
     def __init__(self, d_model, num_layers, max_len=30):
+        super().__init__()
+
         self.pep_embedding = nn.Embedding(22, d_model, padding_idx=0)
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
@@ -157,7 +159,7 @@ class PepEmbedding(nn.Module):
         self.tfm = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.register_buffer(
             "pos_encoding",
-            sinusoidal_position_encoding(max_len, d_model, device="cpu"),
+            sinusoidal_position_encoding(max_len, d_model),
             persistent=False,
         )
 
