@@ -3,6 +3,7 @@ from torch import nn
 
 import math
 
+
 def sinusoidal_time_embedding(t, dim):
     """
     t: (batch,)  or (batch, 1)
@@ -24,6 +25,7 @@ def sinusoidal_time_embedding(t, dim):
     emb = torch.cat([torch.sin(angles), torch.cos(angles)], dim=-1)
     return emb
 
+
 def sinusoidal_position_encoding(seq_len, dim):
     """
     seq_len: length of sequence (e.g., 200)
@@ -43,14 +45,17 @@ def sinusoidal_position_encoding(seq_len, dim):
     pe = torch.cat([torch.sin(angles), torch.cos(angles)], dim=1)
     return pe
 
+
 class ConcatEmbedding(nn.Module):
     def __init__(self, pep_dim, out_dim: 512):
         super().__init__()
         self.pep_embedding = nn.Embedding(22, pep_dim, padding_idx=0)
         self.fc = nn.Linear(30 * pep_dim + 2, out_dim)
         self.act = nn.SiLU()
-        
-    def forward(self, seq: torch.Tensor, charge: torch.Tensor, time: torch.Tensor):
+
+    def forward(
+        self, seq: torch.Tensor, charge: torch.Tensor, time: torch.Tensor
+    ):
         seq_embs = self.pep_embedding(seq)
         # print(seq_embs.shape)
         concat_seq = seq_embs.view(seq.size(0), -1)
@@ -58,11 +63,15 @@ class ConcatEmbedding(nn.Module):
         cond = torch.cat([concat_seq, charge, time], dim=-1)
         return self.act(self.fc(cond))
 
+
 class ChargeEmbedding(nn.Module):
-    def __init__(self, min_charge: int = 2,
-                 max_charge: int = 6,
-                 emb_dim: int = 4,
-                 use_layernorm: bool = True):
+    def __init__(
+        self,
+        min_charge: int = 2,
+        max_charge: int = 6,
+        emb_dim: int = 4,
+        use_layernorm: bool = True,
+    ):
         super().__init__()
 
         self.min_charge = min_charge
@@ -78,13 +87,13 @@ class ChargeEmbedding(nn.Module):
     def forward(self, charge: torch.Tensor):
         # print(f"Charge shape: {charge.shape}")
         charge_idx = charge - self.min_charge
-    
+
         emb = self.emb(charge_idx).squeeze(1)
         # print(f"Emb shape: {emb.shape}")
         scalar = (charge.float() - self.min_charge) / (
             self.max_charge - self.min_charge
         )
-        
+
         # print(f"Scalar shape: {scalar.shape}")
         # scalar = scalar.unsqueeze(-1)
         # print(f"Scalar shape: {scalar.shape}")
@@ -95,31 +104,71 @@ class ChargeEmbedding(nn.Module):
 
         return out
 
+
 class TfmEmbedding(nn.Module):
-    def __init__(self, pep_dim=128, time_dim=32, charge_dim=32, min_charge=2, max_charge=6, num_blocks_pep=6):
+    def __init__(
+        self,
+        pep_dim=128,
+        time_dim=32,
+        charge_dim=32,
+        min_charge=2,
+        max_charge=6,
+        num_blocks_pep=6,
+    ):
         super().__init__()
         # self.charge_embedding = nn.Linear(1, charge_dim)
         self.charge_dim = charge_dim
         self.time_dim = time_dim
-        
+
         self.pep_embedding = nn.Embedding(22, pep_dim, padding_idx=0)
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=pep_dim, 
-            nhead=8, 
-            dim_feedforward=1024,
-            batch_first=True
+            d_model=pep_dim, nhead=8, dim_feedforward=1024, batch_first=True
         )
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_blocks_pep)
-        self.charge_embedding = ChargeEmbedding(min_charge, max_charge, charge_dim)
-    
-    def forward(self, seq: torch.Tensor, charge: torch.Tensor, time: torch.Tensor):
-        pep_emb = self.pep_embedding(seq) + sinusoidal_position_encoding(seq.size(1), self.pep_embedding.embedding_dim).unsqueeze(0)
+        self.transformer = nn.TransformerEncoder(
+            encoder_layer, num_layers=num_blocks_pep
+        )
+        self.charge_embedding = ChargeEmbedding(
+            min_charge, max_charge, charge_dim
+        )
+
+    def forward(
+        self, seq: torch.Tensor, charge: torch.Tensor, time: torch.Tensor
+    ):
+        pep_emb = self.pep_embedding(seq) + sinusoidal_position_encoding(
+            seq.size(1), self.pep_embedding.embedding_dim
+        ).unsqueeze(0)
         pep_c = self.transformer(pep_emb).mean(dim=1)
         # charge_emb = sinusoidal_time_embedding(charge, self.charge_dim)
         charge_emb = self.charge_embedding(charge)
         time_emb = sinusoidal_time_embedding(time, self.time_dim)
         # print(pep_c.shape, charge_emb.shape, time_emb.shape)
         return torch.cat([pep_c, charge_emb, time_emb], dim=-1)
+
+
+class PepEmbedding(nn.Module):
+    def __init__(self, d_model, num_layers, max_len=30):
+        self.pep_embedding = nn.Embedding(22, d_model, padding_idx=0)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=8,
+            dim_feedforward=d_model * 2,
+            batch_first=True,
+        )
+        self.tfm = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        self.register_buffer(
+            "pos_encoding",
+            sinusoidal_position_encoding(max_len, d_model, device="cpu"),
+            persistent=False,
+        )
+
+    def forward(self, pep: torch.Tensor):
+        x = self.pep_embedding(pep)
+        pos = self.pos_encoding[: pep.size(1)].to(x.device)
+        x = x + pos.unsqueeze(0)
+        mask = pep == 0
+
+        return self.tfm(x, src_key_padding_mask=mask)
+
 
 class PretrainEmbedding(nn.Module):
     def __init__(self):

@@ -27,13 +27,17 @@ PROSIT_ALHABET = {
 }
 PROSIT_INDEXED_ALPHABET = {i: c for c, i in PROSIT_ALHABET.items()}
 
+
 def get_peptide_seq(integer_seq):
-    return "".join(PROSIT_INDEXED_ALPHABET[int(i)] for i in integer_seq if i != 0)
+    return "".join(
+        PROSIT_INDEXED_ALPHABET[int(i)] for i in integer_seq if i != 0
+    )
+
 
 def plot_loss_history(loss_history, smooth_window=None):
     """
     Plot training loss history.
-    
+
     Args:
         loss_history (list or array): Danh sách loss theo từng step/epoch.
         smooth_window (int, optional): Nếu truyền vào, sẽ vẽ thêm đường smooth
@@ -41,19 +45,21 @@ def plot_loss_history(loss_history, smooth_window=None):
     """
     plt.figure()
     plt.plot(loss_history)
-    
+
     if smooth_window is not None and smooth_window > 1:
         import numpy as np
+
         loss_array = np.array(loss_history)
         kernel = np.ones(smooth_window) / smooth_window
-        smooth_loss = np.convolve(loss_array, kernel, mode='valid')
+        smooth_loss = np.convolve(loss_array, kernel, mode="valid")
         plt.plot(range(smooth_window - 1, len(loss_history)), smooth_loss)
-    
+
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.title("Training Loss History")
     plt.savefig(f"Loss_History_{time()}.jpg")
     plt.show()
+
 
 def to_numpy(x):
     try:
@@ -63,10 +69,13 @@ def to_numpy(x):
         pass
     return np.asarray(x)
 
-def plot_intensity(intensity_vector: torch.Tensor | np.ndarray,
-                   peptide,
-                   precursor_charge: int,
-                   allow_invalid: bool = True):
+
+def plot_intensity(
+    intensity_vector: torch.Tensor | np.ndarray,
+    peptide,
+    precursor_charge: int,
+    allow_invalid: bool = True,
+):
     """
     Plot ProteomeTools-style intensity with structural masking.
 
@@ -99,15 +108,20 @@ def plot_intensity(intensity_vector: torch.Tensor | np.ndarray,
     x[mask == 0] = -1
 
     indices = np.arange(len(x))
-    valid_mask = x >= 0
-    invalid_mask = x < 0
+    valid_mask = x != -1
+    invalid_mask = x == -1
 
     plt.figure(figsize=(12, 4))
 
     if allow_invalid:
         plt.scatter(indices[valid_mask], x[valid_mask], s=15, label="Valid")
-        plt.scatter(indices[invalid_mask], x[invalid_mask],
-                    marker='x', s=20, label="Invalid")
+        plt.scatter(
+            indices[invalid_mask],
+            x[invalid_mask],
+            marker="x",
+            s=20,
+            label="Invalid",
+        )
 
         plt.ylim(-1.1, 1.05)
     else:
@@ -122,9 +136,11 @@ def plot_intensity(intensity_vector: torch.Tensor | np.ndarray,
         plt.legend()
     plt.tight_layout()
     plt.show()
-    
-def create_fragment_mask_from_peptide(peptide, precursor_charge, 
-                                      max_len=30, max_frag_charge=3):
+
+
+def create_fragment_mask_from_peptide(
+    peptide, precursor_charge, max_len=30, max_frag_charge=3
+):
     """
     Create mask for ProteomeTools FI intensity vector (174 dims).
 
@@ -137,8 +153,8 @@ def create_fragment_mask_from_peptide(peptide, precursor_charge,
     Returns:
         np.ndarray: mask vector of shape (174,)
     """
-    
-    seq_len = np.count_nonzero(peptide) 
+
+    seq_len = np.count_nonzero(peptide)
     assert seq_len <= max_len
     assert precursor_charge >= 1
 
@@ -162,12 +178,82 @@ def create_fragment_mask_from_peptide(peptide, precursor_charge,
 
     return mask
 
-if __name__ == "__main__":
-    import h5py
-    file_path = r"E:\Dai hoc\2526I\dacn\flow-matching\data\traintest_hcd.hdf5"
-    with h5py.File(file_path, "r") as f:
-        print("Keys:", list(f.keys()))
-        intensities_raw = f["intensities_raw"][:6]
-    
-    print(type(intensities_raw[5]))
-    plot_intensity(torch.tensor(intensities_raw[2], dtype=torch.float64), allow_invalid=True)
+
+def create_batch_fragment_mask_from_peptide(
+    batch_peptide, batch_precursor_charge, max_len=30, max_frag_charge=3
+):
+    """
+    Create mask for ProteomeTools FI intensity vector (174 dims).
+
+    Args:
+        peptide (list or np.ndarray): (B, L) integer-encoded peptide sequence
+        precursor_charge (int): (B,) or (B, 1) precursor charge
+        max_len (int): maximum peptide length (default=30)
+        max_frag_charge (int): maximum fragment charge (default=3)
+
+    Returns:
+        np.ndarray: mask vector of shape (174,)
+    """
+
+    batch_size = batch_peptide.shape[0]
+    n_pos = max_len - 1
+    mask = np.zeros((batch_size, 2 * max_frag_charge * n_pos))
+
+    for i in range(batch_size):
+        seq_len = np.count_nonzero(batch_peptide[i])
+        valid_positions = seq_len - 1
+
+        idx = 0
+        for pos in range(n_pos):
+
+            pos_valid = pos < valid_positions
+
+            for ion_type in range(2):  # b,y
+                for frag_charge in range(1, max_frag_charge + 1):
+
+                    if pos_valid and frag_charge <= batch_precursor_charge[i]:
+                        mask[i, idx] = 1
+
+                    idx += 1
+
+    return mask
+
+
+def process_intensity_vector(
+    intensity_vector: torch.Tensor | np.array,
+) -> torch.Tensor | np.array:
+    # turn 174 D into (29, 6) with 6 channels: b1, b2, b3, y1, y2, y3
+    if intensity_vector.shape[-1] != 174:
+        raise ValueError("Input vector must have length 174")
+
+    if isinstance(intensity_vector, torch.Tensor):
+        return intensity_vector.reshape(29, 6)
+
+    elif isinstance(intensity_vector, np.ndarray):
+        return intensity_vector.reshape(29, 6)
+
+    else:
+        raise TypeError("Input must be torch.Tensor or np.ndarray")
+
+
+def masked_mse_loss(pred, target, mask):
+    """
+    Compute MSE loss only on valid positions indicated by mask.
+
+    Args:
+        pred (torch.Tensor): predicted intensity vector, shape (batch_size, 29, 6)
+        target (torch.Tensor): true intensity vector, shape (batch_size, 29, 6)
+        mask (torch.Tensor): binary mask indicating valid positions, shape (batch_size, 29, 6)
+
+    Returns:
+        torch.Tensor: masked MSE loss
+    """
+    valid_index = mask == 1
+    valid_pred = pred[valid_index]
+    valid_target = target[valid_index]
+
+    if valid_pred.numel() == 0:
+        return torch.tensor(0.0, device=pred.device)
+
+    loss = torch.nn.MSELoss()(valid_pred, valid_target)
+    return loss
