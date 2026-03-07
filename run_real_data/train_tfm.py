@@ -1,4 +1,4 @@
-import sys
+import sys, os
 
 # sys.path.append(r"E
 # sys.path.append(r"E:\Dai hoc\2526I\dacn\flow-matching\demo-code\2d")
@@ -7,6 +7,7 @@ from collections import defaultdict, Counter
 import numpy as np
 from rich import print
 import torch
+from dotenv import load_dotenv
 
 torch.set_default_device("cuda")
 from torch import nn
@@ -27,7 +28,9 @@ from utils import (
     process_intensity_vector,
 )
 
-train_path = r"E:\Dai hoc\2526I\dacn\flow-matching\data\traintest_hcd.hdf5"
+load_dotenv()
+
+train_path = os.getenv("TRAIN_PATH")
 with h5py.File(train_path, "r") as f:
     print("Keys:", list(f.keys()))
 
