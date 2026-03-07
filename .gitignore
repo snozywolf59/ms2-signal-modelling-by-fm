@@ -5,6 +5,7 @@
 *.cubin
 *.fatbin
 
+.env
 /.venv/
 
 data/
