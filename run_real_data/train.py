@@ -1,4 +1,4 @@
-import sys
+import sys, os
 # sys.path.append(r"E
 # sys.path.append(r"E:\Dai hoc\2526I\dacn\flow-matching\demo-code\2d")
 import h5py
@@ -18,9 +18,14 @@ import random
 from gen_path import get_xt
 from metrics import pcc, sa
 from models import HCDFlowResMLP, HCDFlow
-from utils import plot_loss_history, create_fragment_mask_from_peptide
+from utils import plot_loss_history, create_fragment_mask_from_peptide, masked_mse_loss
 
-train_path = r"E:\Dai hoc\2526I\dacn\flow-matching\data\traintest_hcd.hdf5"
+import time
+
+from dotenv import load_dotenv
+load_dotenv()
+
+train_path = os.getenv("TRAIN_PATH")
 with h5py.File(train_path, "r") as f:
     print("Keys:", list(f.keys()))
     print("Start loading training data")
@@ -45,9 +50,9 @@ print(f"Max charge: {max_charge}")
 print("Formatting Charges successfully")
 
 epoch = 6
-batch_size = 512
+batch_size = 256
 model_layer = 4
-pep_layer = 4
+pep_layer = 6
 
 # model_path = r"E:\Dai hoc\2526I\dacn\flow-matching\run_real_data\checkpoints\tfmemb_adaln6_8e.pth"
 model = HCDFlowResMLP(noise_dim=174, pep_dim=256, time_dim=128, charge_dim=9, num_blocks=model_layer, num_blocks_pep=pep_layer, min_charge=min_charge, max_charge=max_charge)
@@ -58,7 +63,8 @@ print(f"Train with: {epoch} epochs with batch size: {batch_size}")
 print(f"Num params: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
 loss_history = []
 last_100_loss = []
-
+validate_pcc = []
+validate_sa = []
 
 pbar = tqdm(range(int(epoch)), desc="Training")
 num_samples = len(seqs)
@@ -89,11 +95,10 @@ for ep in pbar:
         noise = torch.randn_like(batch_intensities)
         t = torch.rand(cur_bs, 1)
 
-        x_t = get_xt(batch_intensities, noise, t)
+        x_t = get_xt(noise, batch_intensities, t, sigma=1e-4)
         u_pred = model(x_t, t=t, pep_seq=batch_pep_seq, charge=batch_charge)
 
         loss = nn.MSELoss()(u_pred, batch_intensities - noise)
-
         
         loss.backward()
         optimizer.step()
@@ -113,18 +118,26 @@ for ep in pbar:
                 print(f"Avg loss from last 1000 batch: {(sum(loss_history[-10:-1])/10):.4f}")
     
             # validate batch
-                model.eval()
-                batch_intensities = batch_intensities[0:32]
-                batch_pep_seq = batch_pep_seq[0:32]
-                batch_charge = batch_charge[0:32]
-                noise = torch.randn_like(batch_intensities)
-                
-                generated_batch = model.sample(noise, batch_pep_seq, batch_charge)
-                
-                print(f"PCC test after {ep} epoch: {pcc(generated_batch, batch_intensities)}")
-                print(f"SA test after {ep} epoch: {sa(generated_batch, batch_intensities)}")
+            if len(loss_history) % 10 == 0:
+                with torch.no_grad():  # validate batch
+                    model.eval()
+                    batch_intensities = batch_intensities[0:32]
+                    batch_pep_seq = batch_pep_seq[0:32]
+                    batch_charge = batch_charge[0:32]
+
+                    noise = torch.randn_like(batch_intensities)
+
+                    generated_batch = model.sample(
+                        noise, batch_pep_seq, batch_charge, step=6
+                    )
+                    score_pcc = pcc(generated_batch, batch_intensities)
+                    score_sa = sa(generated_batch, batch_intensities)
+                    validate_pcc.append(score_pcc[0])
+                    validate_sa.append(score_sa[0])
                 model.train()
 
-torch.save(model.state_dict(), f"tfmemb_adalm_{model_layer}_{pep_layer}_{batch_size}_8e.pth")
+torch.save(model.state_dict(), f"{time()}_tfmemb_adalm_{model_layer}_{pep_layer}_{batch_size}_8e.pth")
 
 plot_loss_history(loss_history)
+plot_loss_history(validate_pcc, prefix="PCC")
+plot_loss_history(validate_sa, prefix="SA")

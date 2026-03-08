@@ -125,7 +125,7 @@ class NoiseDiffusionEncoderLayer(nn.Module):
 
         self.dropout = nn.Dropout(0.1)
 
-    def forward(self, src_tokens, condition_tokens):
+    def forward(self, src_tokens, condition_tokens, pep_padding_mask=None):
         # self attention
         x = src_tokens + self.dropout(
             self.self_attn(
@@ -140,6 +140,7 @@ class NoiseDiffusionEncoderLayer(nn.Module):
                 self.norm2(x),
                 condition_tokens,
                 condition_tokens,
+                key_padding_mask=pep_padding_mask,
             )[0]
         )
         # FFN
@@ -193,6 +194,7 @@ class DiffusionFlow(nn.Module):
 
         noise_tokens = self.noise_projection(noise)  # B, 29, d_model
         pep_tokens = self.pep_embedding(pep)  # B, L, d_model
+        pep_padding_mask = (pep == 0)
 
         charge_emb = self.charge_embedding(charge)  # B, 4
         time_emb = self.time_embedding(time)  # B, 16
@@ -211,7 +213,7 @@ class DiffusionFlow(nn.Module):
         x = noise_tokens
 
         for block in self.blocks:
-            x = block(x, condition_tokens)
+            x = block(x, condition_tokens, pep_padding_mask=pep_padding_mask)
 
         x = self.final_norm(x)
 

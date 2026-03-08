@@ -53,7 +53,7 @@ print(f"Min charge: {min_charge}")
 print(f"Max charge: {max_charge}")
 
 epoch = 6
-batch_size = 256
+batch_size = 512
 model_layer = 4
 pep_layer = 4
 
@@ -89,6 +89,9 @@ num_batches = math.ceil(num_samples / batch_size)
 validate_pcc = []
 validate_sa = []
 start_time = time()
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
 
 with h5py.File(train_path, "r") as f:
     for ep in pbar:
@@ -155,15 +158,13 @@ with h5py.File(train_path, "r") as f:
                         noise = torch.randn_like(batch_intensities)
 
                         generated_batch = model.sample(
-                            noise, batch_pep_seq, batch_charge
+                            noise, batch_pep_seq, batch_charge, step=6
                         )
                         score_pcc = pcc(generated_batch, batch_intensities)
                         score_sa = sa(generated_batch, batch_intensities)
-                        print(f"PCC test after {ep} epoch: {score_pcc}")
-                        print(f"SA test after {ep} epoch: {score_pcc}")
                         validate_pcc.append(score_pcc[0])
                         validate_sa.append(score_sa[0])
-                        model.train()
+                    model.train()
                 if len(loss_history) % 100 == 0:
                     print(
                         f"Avg loss from last 1000 batch: {(sum(loss_history[-10:-1])/10):.4f}"
@@ -172,7 +173,7 @@ with h5py.File(train_path, "r") as f:
 print(f"Total training time: {time() - start_time} ms")
 torch.save(
     model.state_dict(),
-    f"tfm_diffusion_{model_layer}_{pep_layer}_{batch_size}_8e.pth",
+    f"{time()}_tfm_diffusion_{model_layer}_{pep_layer}_{batch_size}_{epoch}e.pth",
 )
 
 plot_loss_history(loss_history)
