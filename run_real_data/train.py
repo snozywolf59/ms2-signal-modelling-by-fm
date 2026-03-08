@@ -20,7 +20,7 @@ from metrics import pcc, sa
 from models import HCDFlowResMLP, HCDFlow
 from utils import plot_loss_history, create_batch_fragment_mask_from_peptide, masked_mse_loss
 
-import time
+from time import time
 
 from dotenv import load_dotenv
 load_dotenv()
