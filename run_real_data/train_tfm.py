@@ -53,8 +53,8 @@ print(f"Min charge: {min_charge}")
 print(f"Max charge: {max_charge}")
 
 epoch = 6
-batch_size = 32
-model_layer = 2
+batch_size = 256
+model_layer = 4
 pep_layer = 4
 
 # model_path = r"E:\Dai hoc\2526I\dacn\flow-matching\run_real_data\checkpoints\tfmemb_adaln6_8e.pth"
@@ -69,6 +69,15 @@ optimizer = torch.optim.AdamW(
 print(
     f"Num params: {sum(p.numel() for p in model.parameters() if p.requires_grad)}"
 )
+
+print(
+    f"Num params of pep embedding: {
+        sum(p.numel()
+        for p in model.peptide_embedding.parameters()
+        if p.requires_grad)
+        }"
+)
+
 loss_history = []
 last_100_loss = []
 
@@ -86,7 +95,6 @@ with h5py.File(train_path, "r") as f:
         model.train()
 
         for b in range(num_batches):
-            print(b)
             optimizer.zero_grad()
             start = b * batch_size
             end = min((b + 1) * batch_size, num_samples)
@@ -110,12 +118,10 @@ with h5py.File(train_path, "r") as f:
 
             batch_mask = torch.tensor(batch_np_mask, dtype=torch.bool)
 
-            cur_bs = batch_intensities.shape[0]
-
             noise = torch.randn_like(batch_intensities)
-            t = torch.rand(cur_bs, 1)
+            t = torch.rand(end - start, 1)
 
-            x_t = get_xt(batch_intensities, noise, t, sigma=1e-6)
+            x_t = get_xt(noise, batch_intensities, t, sigma=1e-4)
             u_pred = model(
                 noise=x_t, time=t, pep=batch_pep_seq, charge=batch_charge
             )
@@ -123,8 +129,6 @@ with h5py.File(train_path, "r") as f:
             loss = masked_mse_loss(
                 u_pred, batch_intensities - noise, batch_mask
             )
-            if b > 132 * 8:
-                print("after loss", b)
             loss.backward()
             optimizer.step()
 

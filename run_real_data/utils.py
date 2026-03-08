@@ -245,12 +245,5 @@ def process_intensity_vector(
         raise TypeError("Input must be torch.Tensor or np.ndarray")
 
 
-def masked_mse_loss(pred, target, mask):
-    valid_index = mask == 1
-    valid_pred = pred[valid_index]
-    valid_target = target[valid_index]
-
-    if valid_pred.numel() == 0:
-        return torch.tensor(0.0, device=pred.device, requires_grad=True)
-    loss = F.mse_loss(valid_pred, valid_target)
-    return loss
+def masked_mse_loss(pred, target, mask, eps=1e-8):
+    return ((pred - target) ** 2 * mask).sum() / (mask.sum() + eps)
