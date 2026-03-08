@@ -17,28 +17,35 @@ Output:
 """
 
 
-def pcc(
-    intensity_1: torch.Tensor,
-    intensity_2: torch.Tensor,
-    mask: torch.Tensor = None,
-):
+def pcc(intensity_1, intensity_2, mask=None):
     eps = 1e-8
+    dims = tuple(range(1, intensity_1.dim()))
 
-    x = intensity_1
-    y = intensity_2
+    x, y = intensity_1, intensity_2
+
     if mask is not None:
         x = x * mask
         y = y * mask
-    x_mean = x.mean(dim=1, keepdim=True)
-    y_mean = y.mean(dim=1, keepdim=True)
-    x_centered = x - x_mean
-    y_centered = y - y_mean
-    numerator = (x_centered * y_centered).sum(dim=1)
+        n = mask.sum(dim=dims, keepdim=True) + eps
+        x_mean = x.sum(dim=dims, keepdim=True) / n
+        y_mean = y.sum(dim=dims, keepdim=True) / n
+        x_centered = (x - x_mean) * mask
+        y_centered = (y - y_mean) * mask
+    else:
+        x_mean = x.mean(dim=dims, keepdim=True)
+        y_mean = y.mean(dim=dims, keepdim=True)
+        x_centered = x - x_mean
+        y_centered = y - y_mean
+
+    numerator = (x_centered * y_centered).sum(dim=dims)
     denominator = (
-        torch.sqrt((x_centered**2).sum(dim=1) * (y_centered**2).sum(dim=1))
+        torch.sqrt(
+            (x_centered**2).sum(dim=dims) * (y_centered**2).sum(dim=dims)
+        )
         + eps
     )
-    pcc_values = numerator / denominator
+
+    pcc_values = numerator / denominator  # Shape: (B,)
     return pcc_values.mean().item(), pcc_values.min().item()
 
 
@@ -55,17 +62,21 @@ def l2(intensity_1: torch.Tensor, intensity_2: torch.Tensor):
     return intensity_1.mean().item(), intensity_1.sum(dim=1).max().item()
 
 
-def sa(
-    intensity_1: torch.Tensor,
-    intensity_2: torch.Tensor,
-    mask: torch.Tensor = None,
-):
+def sa(intensity_1, intensity_2, mask=None):
+    eps = 1e-8
+    dims = tuple(range(1, intensity_1.dim()))
+
     if mask is not None:
         intensity_1 = intensity_1 * mask
         intensity_2 = intensity_2 * mask
 
-    dot_product = (intensity_1 * intensity_2).sum(dim=1)
-    norm_1 = torch.sqrt((intensity_1**2).sum(dim=1))
-    norm_2 = torch.sqrt((intensity_2**2).sum(dim=1))
-    sa_values = dot_product / (norm_1 * norm_2 + 1e-8)
+    # Dot product tổng hợp trên tất cả các chiều của mẫu
+    dot_product = (intensity_1 * intensity_2).sum(dim=dims)
+
+    # Norm tổng hợp
+    norm_1 = torch.sqrt((intensity_1**2).sum(dim=dims))
+    norm_2 = torch.sqrt((intensity_2**2).sum(dim=dims))
+
+    sa_values = dot_product / (norm_1 * norm_2 + eps) # Shape: (B,)
+
     return sa_values.mean().item(), sa_values.min().item()
