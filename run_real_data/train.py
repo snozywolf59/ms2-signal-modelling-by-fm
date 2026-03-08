@@ -18,7 +18,7 @@ import random
 from gen_path import get_xt
 from metrics import pcc, sa
 from models import HCDFlowResMLP, HCDFlow
-from utils import plot_loss_history, create_fragment_mask_from_peptide, masked_mse_loss
+from utils import plot_loss_history, create_batch_fragment_mask_from_peptide, masked_mse_loss
 
 import time
 
@@ -49,7 +49,7 @@ print(f"Min charge: {min_charge}")
 print(f"Max charge: {max_charge}")
 print("Formatting Charges successfully")
 
-epoch = 6
+epoch = 4
 batch_size = 256
 model_layer = 4
 pep_layer = 6
@@ -79,7 +79,10 @@ for ep in pbar:
         
         start = b * batch_size
         end = min((b + 1) * batch_size, num_samples)
-
+        batch_np_mask = create_batch_fragment_mask_from_peptide(
+            seqs[start:end], charges[start:end]
+        )
+        batch_mask = torch.tensor(batch_np_mask, dtype=torch.bool)
         batch_intensities = torch.tensor(
             intensities[start:end], dtype=torch.float32
         )
@@ -98,6 +101,7 @@ for ep in pbar:
         x_t = get_xt(noise, batch_intensities, t, sigma=1e-4)
         u_pred = model(x_t, t=t, pep_seq=batch_pep_seq, charge=batch_charge)
 
+        # loss = masked_mse_loss(u_pred, batch_intensities - noise)
         loss = nn.MSELoss()(u_pred, batch_intensities - noise)
         
         loss.backward()
@@ -132,6 +136,8 @@ for ep in pbar:
                     )
                     score_pcc = pcc(generated_batch, batch_intensities)
                     score_sa = sa(generated_batch, batch_intensities)
+                    if len(loss_history ) % 100 == 0:
+                        print(score_pcc[0])
                     validate_pcc.append(score_pcc[0])
                     validate_sa.append(score_sa[0])
                 model.train()

@@ -162,6 +162,8 @@ with h5py.File(train_path, "r") as f:
                         )
                         score_pcc = pcc(generated_batch, batch_intensities, batch_mask)
                         score_sa = sa(generated_batch, batch_intensities, batch_mask)
+                        if len(loss_history ) % 100 == 0:
+                            print(score_pcc)
                         validate_pcc.append(score_pcc[0])
                         validate_sa.append(score_sa[0])
                     model.train()
