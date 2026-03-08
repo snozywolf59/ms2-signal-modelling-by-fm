@@ -160,8 +160,8 @@ with h5py.File(train_path, "r") as f:
                         generated_batch = model.sample(
                             noise, batch_pep_seq, batch_charge, step=6
                         )
-                        score_pcc = pcc(generated_batch, batch_intensities)
-                        score_sa = sa(generated_batch, batch_intensities)
+                        score_pcc = pcc(generated_batch, batch_intensities, batch_mask)
+                        score_sa = sa(generated_batch, batch_intensities, batch_mask)
                         validate_pcc.append(score_pcc[0])
                         validate_sa.append(score_sa[0])
                     model.train()
