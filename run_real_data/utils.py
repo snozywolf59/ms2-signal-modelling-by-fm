@@ -247,3 +247,27 @@ def process_intensity_vector(
 
 def masked_mse_loss(pred, target, mask, eps=1e-8):
     return ((pred - target) ** 2 * mask).sum() / (mask.sum() + eps)
+
+
+if __name__ == "__main__":
+    from pyteomics import mass
+    import h5py
+    from rich import print
+
+    with h5py.File(
+        r"E:\Dai hoc\2526I\dacn\flow-matching\data\holdout_hcd.hdf5", "r"
+    ) as f:
+        print("Keys:", list(f.keys()))
+        seqs = f["sequence_integer"][:1]
+        masses_pred = f["masses_pred"][:1]
+        intensities = f["intensities_raw"][:1]
+        charges_oh = f["precursor_charge_onehot"][:1]
+
+    charge = np.argmax(charges_oh) + 1
+    peptide_seq = get_peptide_seq(seqs[0])
+    n = len(peptide_seq)
+    mz_vector = np.zeros(174)
+
+    for i in range(1, n):
+        for z in [1, 2, 3]:
+            b_ion_idx = (i - 1) * 3 + (z - 1)

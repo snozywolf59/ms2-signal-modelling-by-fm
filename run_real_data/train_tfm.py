@@ -29,6 +29,8 @@ from utils import (
     process_intensity_vector,
 )
 
+MAX_INDEX = 100000
+
 load_dotenv()
 
 train_path = os.getenv("TRAIN_PATH")
@@ -37,7 +39,7 @@ with h5py.File(train_path, "r") as f:
 
     # seqs = f["sequence_integer"][:]
     # intensities = f["intensities_raw"][:]
-    charges_oh = f["precursor_charge_onehot"][:]
+    charges_oh = f["precursor_charge_onehot"][:100000]
 
 
 charges = np.argmax(charges_oh, axis=1) + 1
@@ -53,7 +55,7 @@ for charge in charges:
 print(f"Min charge: {min_charge}")
 print(f"Max charge: {max_charge}")
 
-epoch = 6
+epoch = 10
 batch_size = 512
 model_layer = 4
 pep_layer = 4
@@ -138,8 +140,8 @@ with h5py.File(train_path, "r") as f:
 
             last_100_loss.append(loss.item())
 
-            if len(last_100_loss) == 100:
-                mean_last_100 = sum(last_100_loss) / 100
+            if len(last_100_loss) == 10:
+                mean_last_100 = sum(last_100_loss) / len(last_100_loss)
                 last_100_loss.clear()
                 loss_history.append(mean_last_100)
 
@@ -176,7 +178,7 @@ with h5py.File(train_path, "r") as f:
 print(f"Total training time: {time() - start_time} ms")
 torch.save(
     model.state_dict(),
-    f"{datetime.fromtimestamp(time())}_tfm_diffusion_{model_layer}_{pep_layer}_{batch_size}_{epoch}e.pth",
+    f"{datetime.fromtimestamp(time)}_tfm_diffusion_{model_layer}_{pep_layer}_{batch_size}_{epoch}e.pth",
 )
 
 plot_loss_history(loss_history)

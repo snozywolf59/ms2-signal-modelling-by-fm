@@ -12,9 +12,9 @@ class ResBlock(nn.Module):
     def __init__(self, dim, cond_dim=None):
         super().__init__()
         self.norm = nn.RMSNorm(dim)
-        self.fc1 = nn.Linear(dim, dim * 4)  
+        self.fc1 = nn.Linear(dim, dim * 2)  
         self.act = nn.SiLU()
-        self.fc2 = nn.Linear(dim * 4, dim)
+        self.fc2 = nn.Linear(dim * 2, dim)
         
         self.film_fc = nn.Linear(cond_dim, dim * 2)
         nn.init.zeros_(self.film_fc.weight)

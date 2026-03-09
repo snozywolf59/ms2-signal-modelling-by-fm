@@ -70,13 +70,13 @@ def sa(intensity_1, intensity_2, mask=None):
         intensity_1 = intensity_1 * mask
         intensity_2 = intensity_2 * mask
 
-    # Dot product tổng hợp trên tất cả các chiều của mẫu
+    # Dot product
     dot_product = (intensity_1 * intensity_2).sum(dim=dims)
 
-    # Norm tổng hợp
+    # norm tổng hợp
     norm_1 = torch.sqrt((intensity_1**2).sum(dim=dims))
     norm_2 = torch.sqrt((intensity_2**2).sum(dim=dims))
 
-    sa_values = dot_product / (norm_1 * norm_2 + eps) # Shape: (B,)
+    sa_values = dot_product / (norm_1 * norm_2 + eps)  # Shape: (B,)
 
     return sa_values.mean().item(), sa_values.min().item()

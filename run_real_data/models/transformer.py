@@ -127,14 +127,15 @@ class NoiseDiffusionEncoderLayer(nn.Module):
 
     def forward(self, src_tokens, condition_tokens, pep_padding_mask=None):
         # self attention
-        x = src_tokens + self.dropout(
-            self.self_attn(
-                self.norm1(src_tokens),
-                self.norm1(src_tokens),
-                self.norm1(src_tokens),
-            )[0]
-        )
+        # x = src_tokens + self.dropout(
+        #     self.self_attn(
+        #         self.norm1(src_tokens),
+        #         self.norm1(src_tokens),
+        #         self.norm1(src_tokens),
+        #     )[0]
+        # )
         # cross attention
+        x = src_tokens
         x = x + self.dropout(
             self.cross_attn(
                 self.norm2(x),
