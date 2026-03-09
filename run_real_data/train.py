@@ -15,7 +15,7 @@ import math
 from tqdm.auto import tqdm
 import random
 
-from gen_path import get_xt
+from gen_path import get_xt, get_x0
 from metrics import pcc, sa
 from models import HCDFlowResMLP, HCDFlow
 from utils import plot_loss_history, create_batch_fragment_mask_from_peptide, masked_mse_loss
@@ -50,10 +50,10 @@ print(f"Min charge: {min_charge}")
 print(f"Max charge: {max_charge}")
 print("Formatting Charges successfully")
 
-epoch = 4
+epoch = 6
 batch_size = 256
-model_layer = 3
-pep_layer = 4
+model_layer = 4
+pep_layer = 6
 
 # model_path = r"E:\Dai hoc\2526I\dacn\flow-matching\run_real_data\checkpoints\tfmemb_adaln6_8e.pth"
 model = HCDFlowResMLP(noise_dim=174, pep_dim=256, time_dim=128, charge_dim=9, num_blocks=model_layer, num_blocks_pep=pep_layer, min_charge=min_charge, max_charge=max_charge)
@@ -104,10 +104,8 @@ for ep in pbar:
             charges[start:end], dtype=torch.long
         ).unsqueeze(1)
 
-        cur_bs = batch_intensities.shape[0]
-
-        noise = torch.randn_like(batch_intensities)
-        t = torch.rand(cur_bs, 1)
+        noise = get_x0(batch_intensities, max_scale=True)
+        t = torch.rand(end - start, 1)
 
         x_t = get_xt(noise, batch_intensities, t, sigma=1e-4)
         u_pred = model(x_t, t=t, pep_seq=batch_pep_seq, charge=batch_charge)
