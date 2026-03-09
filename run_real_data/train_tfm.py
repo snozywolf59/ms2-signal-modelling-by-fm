@@ -17,6 +17,7 @@ import imageio
 import math
 from tqdm.auto import tqdm
 from time import time
+from datetime import datetime
 
 from gen_path import get_xt
 from metrics import pcc, sa
@@ -175,9 +176,9 @@ with h5py.File(train_path, "r") as f:
 print(f"Total training time: {time() - start_time} ms")
 torch.save(
     model.state_dict(),
-    f"{time()}_tfm_diffusion_{model_layer}_{pep_layer}_{batch_size}_{epoch}e.pth",
+    f"{datetime.fromtimestamp(time())}_tfm_diffusion_{model_layer}_{pep_layer}_{batch_size}_{epoch}e.pth",
 )
 
 plot_loss_history(loss_history)
-plot_loss_history(validate_pcc, "PCC_SCORE")
-plot_loss_history(validate_sa, "SA_SCORE")
+plot_loss_history(validate_pcc, "PCC_SCORE_tfm")
+plot_loss_history(validate_sa, "SA_SCORE_tfm")

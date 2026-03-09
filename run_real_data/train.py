@@ -21,6 +21,7 @@ from models import HCDFlowResMLP, HCDFlow
 from utils import plot_loss_history, create_batch_fragment_mask_from_peptide, masked_mse_loss
 
 from time import time
+from datetime import datetime
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -61,6 +62,15 @@ optimizer = torch.optim.AdamW(model.parameters(), eps=1e-8, lr=2e-4,weight_decay
 print(f"Train with: {epoch} epochs with batch size: {batch_size}")
 
 print(f"Num params: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
+
+print(
+    f"Num params of pep embedding: {
+        sum(p.numel()
+        for p in model.condition_embedding.parameters()
+        if p.requires_grad)
+        }"
+)
+
 loss_history = []
 last_100_loss = []
 validate_pcc = []
@@ -79,10 +89,7 @@ for ep in pbar:
         
         start = b * batch_size
         end = min((b + 1) * batch_size, num_samples)
-        batch_np_mask = create_batch_fragment_mask_from_peptide(
-            seqs[start:end], charges[start:end]
-        )
-        batch_mask = torch.tensor(batch_np_mask, dtype=torch.bool)
+        
         batch_intensities = torch.tensor(
             intensities[start:end], dtype=torch.float32
         )
@@ -125,6 +132,10 @@ for ep in pbar:
             if len(loss_history) % 10 == 0:
                 with torch.no_grad():  # validate batch
                     model.eval()
+                    batch_np_mask = create_batch_fragment_mask_from_peptide(
+                        seqs[start:start+32], charges[start:start+32], reshape=False
+                    )
+                    batch_mask = torch.tensor(batch_np_mask, dtype=torch.bool)
                     batch_intensities = batch_intensities[0:32]
                     batch_pep_seq = batch_pep_seq[0:32]
                     batch_charge = batch_charge[0:32]
@@ -134,15 +145,15 @@ for ep in pbar:
                     generated_batch = model.sample(
                         noise, batch_pep_seq, batch_charge, step=6
                     )
-                    score_pcc = pcc(generated_batch, batch_intensities)
-                    score_sa = sa(generated_batch, batch_intensities)
+                    score_pcc = pcc(generated_batch, batch_intensities, batch_mask)
+                    score_sa = sa(generated_batch, batch_intensities, batch_mask)
                     if len(loss_history ) % 100 == 0:
                         print(score_pcc[0])
                     validate_pcc.append(score_pcc[0])
                     validate_sa.append(score_sa[0])
                 model.train()
 
-torch.save(model.state_dict(), f"{time()}_tfmemb_adalm_{model_layer}_{pep_layer}_{batch_size}_8e.pth")
+torch.save(model.state_dict(), f"{datetime.fromtimestamp(time())}_tfmemb_adalm_{model_layer}_{pep_layer}_{batch_size}_8e.pth")
 
 plot_loss_history(loss_history)
 plot_loss_history(validate_pcc, prefix="PCC")
