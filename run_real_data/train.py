@@ -53,7 +53,7 @@ print("Formatting Charges successfully")
 epoch = 6
 batch_size = 256
 model_layer = 4
-pep_layer = 6
+pep_layer = 4
 
 # model_path = r"E:\Dai hoc\2526I\dacn\flow-matching\run_real_data\checkpoints\tfmemb_adaln6_8e.pth"
 model = HCDFlowResMLP(noise_dim=174, pep_dim=256, time_dim=128, charge_dim=9, num_blocks=model_layer, num_blocks_pep=pep_layer, min_charge=min_charge, max_charge=max_charge)
@@ -104,13 +104,15 @@ for ep in pbar:
             charges[start:end], dtype=torch.long
         ).unsqueeze(1)
 
-        noise = get_x0(batch_intensities, max_scale=True)
+        noise = get_x0(x_1=batch_intensities, max_scale=True)
+        # print(noise.shape)
         t = torch.rand(end - start, 1)
 
-        x_t = get_xt(noise, batch_intensities, t, sigma=1e-4)
+        x_t = get_xt(x_0=noise, x_1=batch_intensities, t=t, sigma=1e-4)
+        # print(x_t.shape)
         u_pred = model(x_t, t=t, pep_seq=batch_pep_seq, charge=batch_charge)
 
-        loss = masked_mse_loss(u_pred, batch_intensities - noise, batch_mask)
+        loss = masked_mse_loss(u_pred, batch_intensities - noise)
         # loss = nn.MSELoss()(u_pred, batch_intensities - noise)
         
         loss.backward()

@@ -245,8 +245,16 @@ def process_intensity_vector(
         raise TypeError("Input must be torch.Tensor or np.ndarray")
 
 
-def masked_mse_loss(pred, target, mask, eps=1e-8):
-    return ((pred - target) ** 2 * mask).sum() / (mask.sum() + eps)
+def masked_mse_loss(pred, target, mask=None, eps=1e-8):
+    assert pred.shape == target.shape, "pred and target must have same shape"
+    loss = (pred - target) ** 2
+
+    if mask is None:
+        return loss.mean()
+    assert mask.shape == pred.shape, "mask must have same shape with pred and target"
+
+    mask = mask.float()
+    return (loss * mask).sum() / (mask.sum() + eps)
 
 
 if __name__ == "__main__":
