@@ -127,15 +127,15 @@ class NoiseDiffusionEncoderLayer(nn.Module):
 
     def forward(self, src_tokens, condition_tokens, pep_padding_mask=None):
         # self attention
-        # x = src_tokens + self.dropout(
-        #     self.self_attn(
-        #         self.norm1(src_tokens),
-        #         self.norm1(src_tokens),
-        #         self.norm1(src_tokens),
-        #     )[0]
-        # )
+        x = src_tokens + self.dropout(
+            self.self_attn(
+                self.norm1(src_tokens),
+                self.norm1(src_tokens),
+                self.norm1(src_tokens),
+            )[0]
+        )
         # cross attention
-        x = src_tokens
+        # x = src_tokens
         x = x + self.dropout(
             self.cross_attn(
                 self.norm2(x),
@@ -156,14 +156,17 @@ class DiffusionFlow(nn.Module):
         self, d_noise, d_model, nhead=8, num_layers=6, num_pep_layers=6
     ):
         super().__init__()
+        
+        time_dim = 16
+        charge_dim = 4
 
         self.pep_embedding = PepEmbedding(d_model, num_layers=num_pep_layers)
         self.noise_projection = NoiseProjection(d_noise, d_model)
 
-        self.charge_embedding = ChargeEmbedding(1, 6, use_layernorm=False)
-        self.time_embedding = TimeEmbedding(16)
+        self.charge_embedding = ChargeEmbedding(1, 6, use_layernorm=False, emb_dim=charge_dim)
+        self.time_embedding = TimeEmbedding(d_out=time_dim)
 
-        cond_dim = d_model + 4 + 16
+        cond_dim = d_model + time_dim + charge_dim
 
         self.blocks = nn.ModuleList(
             [
@@ -171,11 +174,13 @@ class DiffusionFlow(nn.Module):
                     d_model,
                     nhead,
                     d_model,
-                    cond_dim,
+                    cond_dim=d_model
                 )
                 for _ in range(num_layers)
             ]
         )
+        
+        self.cond_proj = nn.Linear(time_dim + charge_dim, d_model)
 
         self.final_norm = nn.LayerNorm(d_model)
 
@@ -193,34 +198,31 @@ class DiffusionFlow(nn.Module):
         time: torch.Tensor,  # B
     ):
 
+        # 1. Embeddings cơ bản
         noise_tokens = self.noise_projection(noise)  # B, 29, d_model
-        pep_tokens = self.pep_embedding(pep)  # B, L, d_model
+        pep_tokens = self.pep_embedding(pep)        # B, L, d_model
         pep_padding_mask = (pep == 0)
 
+        # 2. Tạo Global Context (Thời gian + Điện tích)
         charge_emb = self.charge_embedding(charge)  # B, 4
-        time_emb = self.time_embedding(time)  # B, 16
-
-        # expand condition embeddings
-        B, L, _ = pep_tokens.shape
-
-        charge_tokens = charge_emb.unsqueeze(1).expand(B, L, -1)
-        time_tokens = time_emb.unsqueeze(1).expand(B, L, -1)
-
-        # concat condition tokens
-        condition_tokens = torch.cat(
-            [pep_tokens, charge_tokens, time_tokens], dim=-1
-        )  # B, L, d_model + 4 + 16
-
+        time_emb = self.time_embedding(time)        # B, 16
+        global_cond = torch.cat([charge_emb, time_emb], dim=-1) # B, 20
+        
+        # 3. "Tiêm" thông tin global vào từng token Peptide
+        # Thay vì concat làm tăng dimension, ta dùng một linear để trộn 
+        # (Giả sử bạn thêm self.cond_proj = nn.Linear(20, d_model) ở __init__)
+        style_pep = self.cond_proj(global_cond).unsqueeze(1) # B, 1, d_model
+        enhanced_pep_tokens = pep_tokens + style_pep # Broadcast thông tin charge/time vào peptide
+        
         x = noise_tokens
-
+        
+        # 4. Truyền qua các block
         for block in self.blocks:
-            x = block(x, condition_tokens, pep_padding_mask=pep_padding_mask)
+            # Giờ đây Cross-Attention sẽ nhìn vào Peptide đã mang thông tin Charge/Time
+            x = block(x, enhanced_pep_tokens, pep_padding_mask=pep_padding_mask)
 
         x = self.final_norm(x)
-
-        out = self.output_proj(x)  # B, 29, d_noise
-
-        return out
+        return self.output_proj(x)
 
     def step(
         self,

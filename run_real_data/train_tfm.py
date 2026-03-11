@@ -29,7 +29,7 @@ from utils import (
     process_intensity_vector,
 )
 
-MAX_INDEX = 100000
+MAX_INDEX = 16000
 
 load_dotenv()
 
@@ -39,7 +39,7 @@ with h5py.File(train_path, "r") as f:
 
     # seqs = f["sequence_integer"][:]
     # intensities = f["intensities_raw"][:]
-    charges_oh = f["precursor_charge_onehot"][:100000]
+    charges_oh = f["precursor_charge_onehot"][:MAX_INDEX]
 
 
 charges = np.argmax(charges_oh, axis=1) + 1
@@ -55,10 +55,10 @@ for charge in charges:
 print(f"Min charge: {min_charge}")
 print(f"Max charge: {max_charge}")
 
-epoch = 10
+epoch = 100
 batch_size = 512
-model_layer = 4
-pep_layer = 4
+model_layer = 6
+pep_layer = 6
 
 # model_path = r"E:\Dai hoc\2526I\dacn\flow-matching\run_real_data\checkpoints\tfmemb_adaln6_8e.pth"
 model = DiffusionFlow(
@@ -89,8 +89,12 @@ pbar = tqdm(range(int(epoch)), desc="Training")
 num_samples = len(charges)
 num_batches = math.ceil(num_samples / batch_size)
 
-validate_pcc = []
-validate_sa = []
+validate_pcc_mask = []
+validate_sa_mask = []
+validate_pcc_nor = []
+validate_sa_nor = []
+validate_sa_rev_mask = []
+validate_pcc_rev_mask = []
 start_time = time()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -133,7 +137,7 @@ with h5py.File(train_path, "r") as f:
             )
 
             loss = masked_mse_loss(
-                u_pred, batch_intensities - noise, batch_mask
+                u_pred, batch_intensities - noise
             )
             loss.backward()
             optimizer.step()
@@ -163,24 +167,34 @@ with h5py.File(train_path, "r") as f:
                         generated_batch = model.sample(
                             noise, batch_pep_seq, batch_charge, step=6
                         )
-                        score_pcc = pcc(generated_batch, batch_intensities, batch_mask)
-                        score_sa = sa(generated_batch, batch_intensities, batch_mask)
+                        score_pcc_mask = pcc(generated_batch, batch_intensities, batch_mask)
+                        score_sa_mask = sa(generated_batch, batch_intensities, batch_mask)
+                        score_pcc_nor = pcc(generated_batch, batch_intensities)
+                        score_sa_nor = sa(generated_batch, batch_intensities)
+            
                         if len(loss_history ) % 100 == 0:
-                            print(score_pcc)
-                        validate_pcc.append(score_pcc[0])
-                        validate_sa.append(score_sa[0])
+                            print(f"Score PCC Mask: {score_pcc_mask[0]:.4f},\nScore SA Mask: {score_sa_mask[0]:.4f},\nScore PCC Raw: {score_pcc_nor[0]:.4f},\nScore SA Raw: {score_sa_nor[0]:.4f}")
+                            
+                        validate_pcc_mask.append(score_pcc_mask[0])
+                        validate_sa_mask.append(score_sa_mask[0])
+                        validate_pcc_nor.append(score_pcc_nor[0])
+                        validate_sa_nor.append(score_sa_nor[0])
                     model.train()
                 if len(loss_history) % 100 == 0:
                     print(
                         f"Avg loss from last 1000 batch: {(sum(loss_history[-10:-1])/10):.4f}"
                     )
 
-print(f"Total training time: {time() - start_time} ms")
+
+end_time = time()
+print(f"Total training time: {end_time - start_time} ms")
 torch.save(
     model.state_dict(),
-    f"{datetime.fromtimestamp(time)}_tfm_diffusion_{model_layer}_{pep_layer}_{batch_size}_{epoch}e.pth",
+    f"{datetime.fromtimestamp(end_time)}_tfm_diffusion_{model_layer}_{pep_layer}_{batch_size}_{epoch}e.pth",
 )
 
 plot_loss_history(loss_history)
-plot_loss_history(validate_pcc, "PCC_SCORE_tfm")
-plot_loss_history(validate_sa, "SA_SCORE_tfm")
+plot_loss_history(validate_pcc_mask, "PCC_SCORE_MASK_tfm")
+plot_loss_history(validate_sa_mask, "SA_SCORE_MASK_tfm")
+plot_loss_history(validate_pcc_nor, "PCC_SCORE_NOR_tfm")
+plot_loss_history(validate_sa_nor, "SA_SCORE_NOR_tfm")

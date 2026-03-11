@@ -73,8 +73,12 @@ print(
 
 loss_history = []
 last_100_loss = []
-validate_pcc = []
-validate_sa = []
+validate_pcc_mask = []
+validate_sa_mask = []
+validate_pcc_nor = []
+validate_sa_nor = []
+validate_sa_rev_mask = []
+validate_pcc_rev_mask = []
 
 pbar = tqdm(range(int(epoch)), desc="Training")
 num_samples = len(seqs)
@@ -97,6 +101,7 @@ for ep in pbar:
         batch_intensities = torch.tensor(
             intensities[start:end], dtype=torch.float32
         )
+        batch_intensities[batch_intensities == -1] = 0
         batch_pep_seq = torch.tensor(
             seqs[start:end], dtype=torch.long
         )
@@ -151,17 +156,20 @@ for ep in pbar:
                     score_sa_mask = sa(generated_batch, batch_intensities, batch_mask)
                     score_pcc_raw = pcc(generated_batch, batch_intensities)
                     score_sa_raw = sa(generated_batch, batch_intensities)
+                
                     if len(loss_history ) % 100 == 0:
-                        print(score_pcc_mask[0])
-                        print(score_sa_mask[0])
-                        print(score_pcc_raw[0])
-                        print(score_sa_raw[0])
-                    validate_pcc.append(score_pcc_mask[0])
-                    validate_sa.append(score_sa_mask[0])
+                        print(f"Score PCC Mask: {score_pcc_mask[0]:.4f},\nScore SA Mask: {score_sa_mask[0]:.4f},\nScore PCC Raw: {score_pcc_raw[0]:.4f},\nScore SA Raw: {score_sa_raw[0]:.4f},\n")
+                        
+                    validate_pcc_nor.append(score_pcc_raw[0])
+                    validate_sa_nor.append(score_sa_raw[0])
+                    validate_pcc_mask.append(score_pcc_mask[0])
+                    validate_sa_mask.append(score_sa_mask[0])
                 model.train()
 
 torch.save(model.state_dict(), f"{datetime.fromtimestamp(time())}_tfmemb_adalm_{model_layer}_{pep_layer}_{batch_size}_8e.pth")
 
 plot_loss_history(loss_history)
-plot_loss_history(validate_pcc, prefix="PCC")
-plot_loss_history(validate_sa, prefix="SA")
+plot_loss_history(validate_pcc_mask, "PCC_SCORE_MASK_mlp")
+plot_loss_history(validate_sa_mask, "SA_SCORE_MASK_mlp")
+plot_loss_history(validate_pcc_nor, "PCC_SCORE_NOR_mlp")
+plot_loss_history(validate_sa_nor, "SA_SCORE_NOR_mlp")
