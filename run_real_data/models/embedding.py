@@ -34,7 +34,9 @@ def sinusoidal_position_encoding(seq_len, dim):
     """
     device = torch.get_default_device()
 
-    position = torch.arange(seq_len, device=device).float().unsqueeze(1)
+    position = torch.arange(
+        seq_len, device=device, dtype=torch.float64
+    ).unsqueeze(1)
     half_dim = dim // 2
 
     exponent = torch.arange(half_dim, device=device) / half_dim
@@ -153,7 +155,7 @@ class PepEmbedding(nn.Module):
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
             nhead=8,
-            dim_feedforward=d_model * 2,
+            dim_feedforward=d_model * 4,
             batch_first=True,
         )
         self.tfm = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)

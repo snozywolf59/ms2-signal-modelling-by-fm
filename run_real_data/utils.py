@@ -295,17 +295,3 @@ def calculate_fragments(
             # print(f"y{L - i}^{z}+    | {y_mz:.4f}")
             intensity[(L - i - 1) * 6 + z - 1] = y_mz
     return intensity
-
-
-def plot_intensity_spectrum(seq, charge, intensities):
-    precursor_mz = mass.fast_mass(seq, charge=charge)
-    mzs = calculate_fragments(seq, charge)
-    spec = spectrum.MsmsSpectrum(
-        identifier=f"{seq}_{charge}",
-        precursor_mz=precursor_mz,
-        precursor_charge=charge,
-        mz=mzs,
-        intensity=intensities,
-    )
-    plot_spectrum(spec)
-    plt.show()

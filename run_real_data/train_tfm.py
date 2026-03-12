@@ -9,6 +9,7 @@ from rich import print
 import torch
 from dotenv import load_dotenv
 
+torch.set_default_dtype(torch.float64)
 torch.set_default_device("cuda")
 from torch import nn
 import numpy as np
@@ -29,7 +30,6 @@ from utils import (
     process_intensity_vector,
 )
 
-MAX_INDEX = 16000
 
 load_dotenv()
 
@@ -39,7 +39,7 @@ with h5py.File(train_path, "r") as f:
 
     # seqs = f["sequence_integer"][:]
     # intensities = f["intensities_raw"][:]
-    charges_oh = f["precursor_charge_onehot"][:MAX_INDEX]
+    charges_oh = f["precursor_charge_onehot"][:]
 
 
 charges = np.argmax(charges_oh, axis=1) + 1
@@ -65,7 +65,7 @@ model = DiffusionFlow(
     d_noise=6, d_model=256, num_layers=model_layer, num_pep_layers=model_layer
 )
 optimizer = torch.optim.AdamW(
-    model.parameters(), eps=1e-8, lr=3e-4, weight_decay=5e-3
+    model.parameters(), eps=1e-8, lr=2e-4, weight_decay=2e-3
 )
 # model.load_state_dict(torch.load(model_path))
 
@@ -117,9 +117,12 @@ with h5py.File(train_path, "r") as f:
                 batch_np_seqs, batch_np_charges
             )
 
-            batch_intensities = torch.tensor(
-                process_intensity_vector(batch_np_intensities),
-                dtype=torch.float32,
+            batch_intensities = torch.logit(
+                torch.tensor(
+                    process_intensity_vector(batch_np_intensities),
+                    dtype=torch.float64,
+                ),
+                eps=1e-4,
             )
             batch_pep_seq = torch.tensor(batch_np_seqs, dtype=torch.long)
             batch_charge = torch.tensor(
@@ -131,13 +134,13 @@ with h5py.File(train_path, "r") as f:
             noise = torch.randn_like(batch_intensities)
             t = torch.rand(end - start, 1)
 
-            x_t = get_xt(noise, batch_intensities, t, sigma=1e-4)
+            x_t = get_xt(noise, batch_intensities, t, sigma=1e-5)
             u_pred = model(
                 noise=x_t, time=t, pep=batch_pep_seq, charge=batch_charge
             )
 
             loss = masked_mse_loss(
-                u_pred, batch_intensities - noise
+                u_pred, batch_intensities - noise, batch_mask
             )
             loss.backward()
             optimizer.step()
@@ -158,32 +161,41 @@ with h5py.File(train_path, "r") as f:
                 if len(loss_history) % 10 == 0:
                     with torch.no_grad():  # validate batch
                         model.eval()
-                        batch_intensities = batch_intensities[0:32]
+                        batch_intensities = torch.sigmoid(
+                            batch_intensities[0:32]
+                        )
                         batch_pep_seq = batch_pep_seq[0:32]
                         batch_charge = batch_charge[0:32]
                         batch_mask = batch_mask[0:32]
                         noise = torch.randn_like(batch_intensities)
 
-                        generated_batch = model.sample(
-                            noise, batch_pep_seq, batch_charge, step=6
+                        generated_batch = torch.sigmoid(
+                            model.sample(
+                                noise, batch_pep_seq, batch_charge, step=10
+                            )
                         )
-                        score_pcc_mask = pcc(generated_batch, batch_intensities, batch_mask)
-                        score_sa_mask = sa(generated_batch, batch_intensities, batch_mask)
+                        score_pcc_mask = pcc(
+                            generated_batch, batch_intensities, batch_mask
+                        )
+                        score_sa_mask = sa(
+                            generated_batch, batch_intensities, batch_mask
+                        )
                         score_pcc_nor = pcc(generated_batch, batch_intensities)
                         score_sa_nor = sa(generated_batch, batch_intensities)
-            
-                        if len(loss_history ) % 100 == 0:
-                            print(f"Score PCC Mask: {score_pcc_mask[0]:.4f},\nScore SA Mask: {score_sa_mask[0]:.4f},\nScore PCC Raw: {score_pcc_nor[0]:.4f},\nScore SA Raw: {score_sa_nor[0]:.4f}")
-                            
+
+                        if len(loss_history) % 100 == 0:
+                            print(
+                                f"Score PCC Mask: {score_pcc_mask[0]:.4f},\n"
+                                f"Score SA Mask: {score_sa_mask[0]:.4f},\n"
+                                f"Score PCC Raw: {score_pcc_nor[0]:.4f},\n"
+                                f"Score SA Raw: {score_sa_nor[0]:.4f}"
+                            )
+
                         validate_pcc_mask.append(score_pcc_mask[0])
                         validate_sa_mask.append(score_sa_mask[0])
                         validate_pcc_nor.append(score_pcc_nor[0])
                         validate_sa_nor.append(score_sa_nor[0])
                     model.train()
-                if len(loss_history) % 100 == 0:
-                    print(
-                        f"Avg loss from last 1000 batch: {(sum(loss_history[-10:-1])/10):.4f}"
-                    )
 
 
 end_time = time()

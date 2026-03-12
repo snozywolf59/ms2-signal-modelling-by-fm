@@ -121,7 +121,7 @@ for ep in pbar:
         )
         batch_mask = torch.tensor(batch_np_mask, dtype=torch.bool)
         batch_intensities = torch.tensor(
-            intensities[start:end], dtype=torch.float32
+            intensities[start:end], dtype=torch.float64
         )
 
         batch_intensities[batch_intensities == -1] = 0
