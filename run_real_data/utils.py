@@ -3,6 +3,9 @@ from time import time
 import numpy as np
 import torch
 import torch.nn.functional as F
+from pyteomics import mass
+from spectrum_utils import spectrum
+from spectrum_utils.plot import spectrum as plot_spectrum
 
 from typing import Union
 
@@ -251,31 +254,58 @@ def masked_mse_loss(pred, target, mask=None, eps=1e-8):
 
     if mask is None:
         return loss.mean()
-    assert mask.shape == pred.shape, "mask must have same shape with pred and target"
+    assert (
+        mask.shape == pred.shape
+    ), "mask must have same shape with pred and target"
 
     mask = mask.float()
     return (loss * mask).sum() / (mask.sum() + eps)
 
 
-if __name__ == "__main__":
-    from pyteomics import mass
-    import h5py
-    from rich import print
+def logit_transform(x, alpha=0.05):
+    x = alpha + (1 - 2 * alpha) * x
+    return torch.log(x) - torch.log(1 - x)
 
-    with h5py.File(
-        r"E:\Dai hoc\2526I\dacn\flow-matching\data\holdout_hcd.hdf5", "r"
-    ) as f:
-        print("Keys:", list(f.keys()))
-        seqs = f["sequence_integer"][:1]
-        masses_pred = f["masses_pred"][:1]
-        intensities = f["intensities_raw"][:1]
-        charges_oh = f["precursor_charge_onehot"][:1]
 
-    charge = np.argmax(charges_oh) + 1
-    peptide_seq = get_peptide_seq(seqs[0])
-    n = len(peptide_seq)
-    mz_vector = np.zeros(174)
+def unlogit_transform(y, alpha=0.05):
+    x = torch.sigmoid(y)
+    x = (x - alpha) / (1 - 2 * alpha)
+    return x
 
-    for i in range(1, n):
-        for z in [1, 2, 3]:
-            b_ion_idx = (i - 1) * 3 + (z - 1)
+
+def calculate_fragments(
+    peptide_sequence, charge=2, max_len: int = 30, max_frag_charge: int = 3
+):
+    # print(f"Peptide: {peptide_sequence} | Max Charge: {charge}")
+    # print(f"{'Ion':<10} | {'m/z':<10}")
+    # print("-" * 25)
+    L = len(peptide_sequence)
+    # Tính toán các loại ion b và y
+    # b_series: từ đầu N-terminus
+    # y_series: từ đầu C-
+    intensity = np.zeros(2 * (max_len - 1) * max_frag_charge)
+    for i in range(1, L):
+        for z in range(1, min(max_frag_charge + 1, charge + 1)):
+            # Tính ion b
+            b_mz = mass.fast_mass(peptide_sequence[:i], ion_type="b", charge=z)
+            # print(f"b{i}^{z}+    | {b_mz:.4f}")
+            intensity[(i - 1) * 6 + max_frag_charge + z - 1] = b_mz
+            # Tính ion y
+            y_mz = mass.fast_mass(peptide_sequence[i:], ion_type="y", charge=z)
+            # print(f"y{L - i}^{z}+    | {y_mz:.4f}")
+            intensity[(L - i - 1) * 6 + z - 1] = y_mz
+    return intensity
+
+
+def plot_intensity_spectrum(seq, charge, intensities):
+    precursor_mz = mass.fast_mass(seq, charge=charge)
+    mzs = calculate_fragments(seq, charge)
+    spec = spectrum.MsmsSpectrum(
+        identifier=f"{seq}_{charge}",
+        precursor_mz=precursor_mz,
+        precursor_charge=charge,
+        mz=mzs,
+        intensity=intensities,
+    )
+    plot_spectrum(spec)
+    plt.show()
