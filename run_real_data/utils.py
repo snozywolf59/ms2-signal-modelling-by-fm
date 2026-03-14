@@ -273,7 +273,7 @@ def unlogit_transform(y, alpha=0.05):
     return x
 
 
-def calculate_fragments(
+def calculate_mzs(
     peptide_sequence, charge=2, max_len: int = 30, max_frag_charge: int = 3
 ):
     # print(f"Peptide: {peptide_sequence} | Max Charge: {charge}")
@@ -283,15 +283,29 @@ def calculate_fragments(
     # Tính toán các loại ion b và y
     # b_series: từ đầu N-terminus
     # y_series: từ đầu C-
-    intensity = np.zeros(2 * (max_len - 1) * max_frag_charge)
+    mzs = np.zeros(2 * (max_len - 1) * max_frag_charge)
     for i in range(1, L):
         for z in range(1, min(max_frag_charge + 1, charge + 1)):
             # Tính ion b
             b_mz = mass.fast_mass(peptide_sequence[:i], ion_type="b", charge=z)
             # print(f"b{i}^{z}+    | {b_mz:.4f}")
-            intensity[(i - 1) * 6 + max_frag_charge + z - 1] = b_mz
+            mzs[(i - 1) * 6 + max_frag_charge + z - 1] = b_mz
             # Tính ion y
             y_mz = mass.fast_mass(peptide_sequence[i:], ion_type="y", charge=z)
             # print(f"y{L - i}^{z}+    | {y_mz:.4f}")
-            intensity[(L - i - 1) * 6 + z - 1] = y_mz
-    return intensity
+            mzs[(L - i - 1) * 6 + z - 1] = y_mz
+    return mzs
+
+
+def plot_intensity_spectrum(seq, charge, intensities):
+    precursor_mz = mass.fast_mass(seq, charge=charge)
+    mzs = calculate_mzs(seq, charge)
+    spec = spectrum.MsmsSpectrum(
+        identifier=f"{seq}_{charge}",
+        precursor_mz=precursor_mz,
+        precursor_charge=charge,
+        mz=mzs,
+        intensity=intensities,
+    )
+    plot_spectrum(spec)
+    plt.show()

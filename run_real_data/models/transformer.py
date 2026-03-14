@@ -2,12 +2,7 @@ import torch
 from torch import nn
 
 from .cfg_based import CFGFlow
-from .embedding import (
-    PepEmbedding,
-    ChargeEmbedding,
-    sinusoidal_time_embedding,
-    sinusoidal_position_encoding,
-)
+from .tfm_embedding import TfmConditionEncoder, TimeEmbedding
 
 
 class NoiseProjection(nn.Module):
@@ -35,19 +30,6 @@ class ReverseNoiseProjection(nn.Module):
 
     def forward(self, x: torch.Tensor):
         return self.projection(x)
-
-
-class TimeEmbedding(nn.Module):
-    def __init__(self, d_out: int):
-        super().__init__()
-        self.embedding = nn.Sequential(
-            nn.Linear(d_out, 8), nn.GELU(), nn.Linear(8, d_out)
-        )
-        self.d_out = d_out
-
-    def forward(self, t: torch.Tensor):
-        t_emb = sinusoidal_time_embedding(t, self.d_out)
-        return self.embedding(t_emb)
 
 
 class AdaLayerNorm(nn.Module):
@@ -153,22 +135,25 @@ class NoiseDiffusionEncoderLayer(nn.Module):
 class DiffusionFlow(nn.Module):
 
     def __init__(
-        self, d_noise, d_model, nhead=8, num_layers=6, num_pep_layers=6
+        self,
+        d_noise,
+        d_model,
+        nhead=8,
+        num_layers=6,
+        num_pep_layers=6,
+        charge_dim=8,
     ):
         super().__init__()
 
-        time_dim = 16
+        time_dim = 128
         charge_dim = 4
-
-        self.pep_embedding = PepEmbedding(d_model, num_layers=num_pep_layers)
-        self.noise_projection = NoiseProjection(d_noise, d_model)
-
-        self.charge_embedding = ChargeEmbedding(
-            1, 6, use_layernorm=False, emb_dim=charge_dim
-        )
+        cond_dim = d_model + time_dim  # + charge_dim
         self.time_embedding = TimeEmbedding(d_out=time_dim)
 
-        cond_dim = d_model + time_dim + charge_dim
+        self.pep_embedding = TfmConditionEncoder(
+            d_model, num_pep_layers, charge_dim=charge_dim
+        )
+        self.noise_projection = NoiseProjection(d_noise, d_model)
 
         self.blocks = nn.ModuleList(
             [
@@ -198,26 +183,19 @@ class DiffusionFlow(nn.Module):
     ):
 
         noise_tokens = self.noise_projection(noise)
-        pep_tokens = self.pep_embedding(pep)
+
+        pep_tokens = self.pep_embedding(pep, charge)
         pep_padding_mask = pep == 0
 
-        charge_emb = self.charge_embedding(
-            charge
-        )  # B, charge_dim -> B, L, charge_dim
         time_emb = self.time_embedding(time)  # B, time dim -> B, L , time dim
 
         B, L, _ = pep_tokens.shape
-        charge_tokens = charge_emb.unsqueeze(1).expand(B, L, -1)
-        time_tokens = time_emb.unsqueeze(1).expand(B, L, -1)
 
         x = noise_tokens
-
-        cond_tokens = torch.cat(
-            [pep_tokens, charge_tokens, time_tokens], dim=-1
-        )
+        time_tokens = time_emb.unsqueeze(1).expand(B, L, -1)
+        cond_tokens = torch.cat([pep_tokens, time_tokens], dim=-1)
 
         for block in self.blocks:
-            # Giờ đây Cross-Attention sẽ nhìn vào Peptide đã mang thông tin Charge/Time
             x = block(x, cond_tokens)
 
         return self.final_norm(self.output_proj(x))

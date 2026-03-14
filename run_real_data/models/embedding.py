@@ -34,9 +34,7 @@ def sinusoidal_position_encoding(seq_len, dim):
     """
     device = torch.get_default_device()
 
-    position = torch.arange(
-        seq_len, device=device, dtype=torch.float64
-    ).unsqueeze(1)
+    position = torch.arange(seq_len, device=device).unsqueeze(1)
     half_dim = dim // 2
 
     exponent = torch.arange(half_dim, device=device) / half_dim
@@ -146,32 +144,6 @@ class TfmEmbedding(nn.Module):
         # print(pep_c.shape, charge_emb.shape, time_emb.shape)
         return torch.cat([pep_c, charge_emb, time_emb], dim=-1)
 
-
-class PepEmbedding(nn.Module):
-    def __init__(self, d_model, num_layers, max_len=30):
-        super().__init__()
-
-        self.pep_embedding = nn.Embedding(22, d_model, padding_idx=0)
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model,
-            nhead=8,
-            dim_feedforward=d_model * 4,
-            batch_first=True,
-        )
-        self.tfm = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
-        self.register_buffer(
-            "pos_encoding",
-            sinusoidal_position_encoding(max_len, d_model),
-            persistent=False,
-        )
-
-    def forward(self, pep: torch.Tensor):
-        x = self.pep_embedding(pep)
-        pos = self.pos_encoding[: pep.size(1)].to(x.device)
-        x = x + pos.unsqueeze(0)
-        mask = pep == 0
-
-        return self.tfm(x, src_key_padding_mask=mask)
 
 
 class PretrainEmbedding(nn.Module):

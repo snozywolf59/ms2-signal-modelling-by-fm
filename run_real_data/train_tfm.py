@@ -56,9 +56,9 @@ print(f"Min charge: {min_charge}")
 print(f"Max charge: {max_charge}")
 
 epoch = 100
-batch_size = 512
-model_layer = 6
-pep_layer = 6
+batch_size = 256
+model_layer = 4
+pep_layer = 4
 
 # model_path = r"E:\Dai hoc\2526I\dacn\flow-matching\run_real_data\checkpoints\tfmemb_adaln6_8e.pth"
 model = DiffusionFlow(
