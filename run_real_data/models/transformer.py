@@ -228,3 +228,6 @@ class DiffusionFlow(nn.Module):
             t = t_end
 
         return x_t
+
+class FluxFlow(nn.Module):
+    pass
