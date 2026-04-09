@@ -25,6 +25,11 @@ from utils import (
     create_batch_fragment_mask_from_peptide,
     masked_mse_loss,
 )
+from process_intensity import (
+    logit_transform,
+    random_logit_transform,
+    sigmoid_transform,
+)
 
 from time import time
 from datetime import datetime
@@ -125,7 +130,7 @@ for ep in pbar:
         )
 
         batch_intensities[batch_intensities == -1] = 0
-        batch_intensities = torch.logit(batch_intensities, eps=1e-3)
+        batch_intensities = logit_transform(batch_intensities)
 
         batch_pep_seq = torch.tensor(seqs[start:end], dtype=torch.long)
         batch_charge = torch.tensor(
@@ -170,13 +175,15 @@ for ep in pbar:
                     model.eval()
 
                     batch_mask = torch.tensor(batch_np_mask, dtype=torch.bool)
-                    batch_intensities = torch.sigmoid(batch_intensities[0:32])
+                    batch_intensities = sigmoid_transform(
+                        batch_intensities[0:32]
+                    )
                     batch_pep_seq = batch_pep_seq[0:32]
                     batch_charge = batch_charge[0:32]
                     batch_mask = batch_mask[0:32]
                     noise = torch.randn_like(batch_intensities)
 
-                    generated_batch = torch.sigmoid(
+                    generated_batch = sigmoid_transform(
                         model.sample(noise, batch_pep_seq, batch_charge, step=6)
                     )
                     score_pcc_mask = pcc(
