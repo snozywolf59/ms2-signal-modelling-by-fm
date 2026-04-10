@@ -8,9 +8,9 @@ import torch
 import numpy as np
 
 # local imports (assumes same package layout as train_tfm.py)
-from gen_path import get_xt
+from run_real_data.utils.gen_path import get_xt
 from models import DiffusionFlow
-from utils import (
+from run_real_data.utils.utils import (
     process_intensity_vector,
     create_batch_fragment_mask_from_peptide,
 )
