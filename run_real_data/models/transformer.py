@@ -37,99 +37,110 @@ class AdaLayerNorm(nn.Module):
         super().__init__()
         self.norm = nn.LayerNorm(d_model)
         self.linear = nn.Linear(cond_dim, 2 * d_model)
+        self.act = nn.SiLU()
 
     def forward(self, x, cond):
+        cond = self.act(cond)
         scale, shift = self.linear(cond).chunk(2, dim=-1)
         x = self.norm(x)
         return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
 
 
-class FluxLayer(nn.Module):
-    def __init__(self, d_model, nhead, dim_feedforward, cond_dim):
+class Modulation(nn.Module):
+    def __init__(self, d_model, cond_dim):
         super().__init__()
-
-        self.attn = nn.MultiheadAttention(d_model, nhead, batch_first=True)
-
-        self.norm1 = AdaLayerNorm(d_model, cond_dim)
-        self.norm2 = AdaLayerNorm(d_model, cond_dim)
-
-        self.linear1 = nn.Linear(d_model, dim_feedforward)
-        self.linear2 = nn.Linear(dim_feedforward, d_model)
-
-        self.dropout = nn.Dropout(0.1)
+        self.mod = nn.Linear(cond_dim, 6 * d_model)
         self.act = nn.SiLU()
 
-    def forward(self, noise_tokens, cond_tokens, cond):
-
-        tokens = torch.cat([cond_tokens, noise_tokens], dim=1)
-
-        h = self.attn(
-            self.norm1(tokens, cond),
-            self.norm1(tokens, cond),
-            self.norm1(tokens, cond),
-        )[0]
-
-        tokens = tokens + h
-
-        h = self.linear2(
-            self.dropout(self.act(self.linear1(self.norm2(tokens, cond))))
-        )
-
-        tokens = tokens + h
-
-        text_len = cond_tokens.shape[1]
-
-        cond_tokens = tokens[:, :text_len]
-        noise_tokens = tokens[:, text_len:]
-
-        return noise_tokens, cond_tokens
+    def forward(self, cond):
+        cond = self.act(cond)
+        a, b, c, d, e, f = self.mod(cond).chunk(6, dim=-1)
+        return a, b, c, d, e, f  # 6 x [B, d_model]
 
 
 class NoiseDiffusionEncoderLayer(nn.Module):
     def __init__(self, d_model, nhead, dim_feedforward, cond_dim):
         super().__init__()
 
-        self.self_attn = nn.MultiheadAttention(d_model, nhead, batch_first=True)
-        self.cross_attn = nn.MultiheadAttention(
-            d_model, nhead, batch_first=True, kdim=cond_dim, vdim=cond_dim
+        self.joint_attn = nn.MultiheadAttention(
+            d_model, nhead, batch_first=True
         )
 
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
-        self.norm3 = nn.LayerNorm(d_model)
+        self.norm1_x = nn.LayerNorm(d_model)
+        self.norm1_c = nn.LayerNorm(d_model)
+        self.norm2_x = nn.LayerNorm(d_model)
+        self.norm2_c = nn.LayerNorm(d_model)
+        self.mod_x = Modulation(d_model, cond_dim)
+        self.mod_c = Modulation(d_model, cond_dim)
 
-        self.ffn = nn.Sequential(
+        self.before_attn_linear_x = nn.Linear(d_model, d_model)
+        self.before_attn_linear_y = nn.Linear(d_model, d_model)
+
+        self.after_attn_linear_x = nn.Linear(d_model, d_model)
+        self.after_attn_linear_y = nn.Linear(d_model, d_model)
+
+        self.ffn_x = nn.Sequential(
             nn.Linear(d_model, dim_feedforward),
             nn.SiLU(),
-            nn.Dropout(0.1),
+            nn.Linear(dim_feedforward, d_model),
+        )
+        self.ffn_c = nn.Sequential(
+            nn.Linear(d_model, dim_feedforward),
+            nn.SiLU(),
             nn.Linear(dim_feedforward, d_model),
         )
 
-        self.dropout = nn.Dropout(0.1)
+    def forward(self, x, c, y_emb, x_mask=None, c_mask=None):
+        # calculate modulation parameters
+        ax, bx, cx, dx, ex, fx = self.mod_x(y_emb)
 
-    def forward(self, src_tokens, condition_tokens, pep_padding_mask=None):
-        # self attention
-        x = src_tokens + self.dropout(
-            self.self_attn(
-                self.norm1(src_tokens),
-                self.norm1(src_tokens),
-                self.norm1(src_tokens),
-            )[0]
-        )
-        # cross attention
-        # x = src_tokens
-        x = x + self.dropout(
-            self.cross_attn(
-                self.norm2(x),
-                condition_tokens,
-                condition_tokens,
-                key_padding_mask=pep_padding_mask,
-            )[0]
-        )
-        # FFN
-        x = x + self.dropout(self.ffn(self.norm3(x)))
+        ac, bc, cc, dc, ec, fc = self.mod_c(y_emb)
 
-        return x
+        ax, bx, cx, dx, ex, fx = [
+            t.unsqueeze(1) for t in (ax, bx, cx, dx, ex, fx)
+        ]
+        ac, bc, cc, dc, ec, fc = [
+            t.unsqueeze(1) for t in (ac, bc, cc, dc, ec, fc)
+        ]
+
+        res_x = x
+        res_c = c
+
+        x = self.norm1_x(x) * ax + bx
+        c = self.norm1_c(c) * ac + bc
+
+        x = self.before_attn_linear_x(x)
+        c = self.before_attn_linear_y(c)
+
+        # 2. Joint Attention
+        batch_size, len_x, _ = x.shape
+        _, len_c, _ = c.shape
+
+        # Gộp token noise (x) và peptide (c)
+        joint_tokens = torch.cat([x, c], dim=1)  # [B, len_x + len_c, d_model]
+
+        # Nếu có mask, cũng cần gộp mask (chú ý: MultiheadAttention batch_first dùng key_padding_mask)
+        # joint_mask = torch.cat([x_mask, c_mask], dim=1) if x_mask is not None else None
+
+        # Self-attention
+        attn_out, _ = self.joint_attn(joint_tokens, joint_tokens, joint_tokens)
+
+        # Tách c và x từ đầu
+        x = attn_out[:, :len_x, :]
+        c = attn_out[:, len_x:, :]
+
+        # Residual
+        x = res_x + self.after_attn_linear_x(x) * cx
+        c = res_c + self.after_attn_linear_y(c) * cc
+
+        x = self.norm2_x(x) * dx + ex
+        c = self.norm2_c(c) * dc + ec
+
+        # 3. Feed Forward
+        x = res_x + self.ffn_x(x) * fx
+        c = res_c + self.ffn_c(c) * fc
+
+        return x, c
 
 
 class DiffusionFlow(nn.Module):
@@ -145,10 +156,9 @@ class DiffusionFlow(nn.Module):
     ):
         super().__init__()
 
-        time_dim = 128
-        charge_dim = 4
-        cond_dim = d_model + time_dim  # + charge_dim
-        self.time_embedding = TimeEmbedding(d_out=time_dim)
+        self.time_dim = 128
+        cond_dim = d_model + self.time_dim  # + charge_dim
+        self.time_embedding = TimeEmbedding(d_out=self.time_dim)
 
         self.pep_embedding = TfmConditionEncoder(
             d_model, num_pep_layers, charge_dim=charge_dim
@@ -184,19 +194,18 @@ class DiffusionFlow(nn.Module):
 
         noise_tokens = self.noise_projection(noise)
 
-        pep_tokens = self.pep_embedding(pep, charge)
-        pep_padding_mask = pep == 0
+        pep_tokens = self.pep_embedding(pep, charge)  # B, L, d_model
+        # pep_padding_mask = pep == 0
 
-        time_emb = self.time_embedding(time)  # B, time dim -> B, L , time dim
-
-        B, L, _ = pep_tokens.shape
+        time_emb = self.time_embedding(time)  # B, time dim
+        mean_pep_emb = pep_tokens.mean(dim=1)  # B, d_model
+        y_emb = torch.cat([time_emb, mean_pep_emb], dim=-1)  # B, cond_dim
 
         x = noise_tokens
-        time_tokens = time_emb.unsqueeze(1).expand(B, L, -1)
-        cond_tokens = torch.cat([pep_tokens, time_tokens], dim=-1)
+        c = pep_tokens
 
         for block in self.blocks:
-            x = block(x, cond_tokens)
+            x, c = block(x, c, y_emb)
 
         return self.final_norm(self.output_proj(x))
 
@@ -228,6 +237,7 @@ class DiffusionFlow(nn.Module):
             t = t_end
 
         return x_t
+
 
 class FluxFlow(nn.Module):
     pass

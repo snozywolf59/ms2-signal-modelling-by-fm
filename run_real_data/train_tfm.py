@@ -20,10 +20,10 @@ from tqdm.auto import tqdm
 from time import time
 from datetime import datetime
 
-from run_real_data.utils.gen_path import get_xt
-from run_real_data.utils.metrics import pcc, sa
+from utils.gen_path import get_xt
+from utils.metrics import pcc, sa
 from models import DiffusionFlow
-from run_real_data.utils.utils import (
+from utils.utils import (
     plot_loss_history,
     create_batch_fragment_mask_from_peptide,
     masked_mse_loss,
@@ -55,7 +55,7 @@ for charge in charges:
 print(f"Min charge: {min_charge}")
 print(f"Max charge: {max_charge}")
 
-epoch = 100
+epoch = 6
 batch_size = 256
 model_layer = 4
 pep_layer = 4
