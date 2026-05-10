@@ -1,212 +1,282 @@
-import sys, os
+"""
+train_tfm.py
+────────
+Training script chính. Mọi hyperparameter và preprocessing mode
+đều đặt trong config.py — không cần sửa file này.
 
-# sys.path.append(r"E
-# sys.path.append(r"E:\Dai hoc\2526I\dacn\flow-matching\demo-code\2d")
-import h5py
-from collections import defaultdict, Counter
-import numpy as np
-from rich import print
-import torch
-from dotenv import load_dotenv
+Chạy:
+    python train.py
+"""
 
-torch.set_default_dtype(torch.float64)
-torch.set_default_device("cuda")
-from torch import nn
-import numpy as np
-import matplotlib.pyplot as plt
-import imageio
 import math
-from tqdm.auto import tqdm
-from time import time
+import os
 from datetime import datetime
+from time import time
 
+import h5py
+import numpy as np
+import torch
+from rich import print
+from tqdm.auto import tqdm
+
+import config as C
+from preprocess import Preprocessor, PreprocessMode
+from models import DiffusionFlow
 from utils.gen_path import get_xt
 from utils.metrics import pcc, sa
-from models import DiffusionFlow
 from utils.utils import (
-    plot_loss_history,
     create_batch_fragment_mask_from_peptide,
     masked_mse_loss,
+    plot_loss_history,
     process_intensity_vector,
 )
 
+# ────────────────────────────────────────────────────────────
+# Setup
+# ────────────────────────────────────────────────────────────
+torch.set_default_dtype(torch.float64)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+torch.set_default_device(device)
 
-load_dotenv()
-
-train_path = os.getenv("TRAIN_PATH")
-with h5py.File(train_path, "r") as f:
-    print("Keys:", list(f.keys()))
-
-    # seqs = f["sequence_integer"][:]
-    # intensities = f["intensities_raw"][:]
-    charges_oh = f["precursor_charge_onehot"][:]
+preprocessor = Preprocessor(
+    mode=C.PREPROCESS_MODE,
+    logit_eps=C.LOGIT_EPS,
+    sphere_eps=C.SPHERE_EPS,
+)
+print(f"[bold cyan]Preprocessor:[/bold cyan] {preprocessor}")
+print(f"[bold cyan]Device:[/bold cyan] {device}")
 
 
-charges = np.argmax(charges_oh, axis=1) + 1
-del charges_oh
+# ────────────────────────────────────────────────────────────
+# Helpers
+# ────────────────────────────────────────────────────────────
+def load_charges(path: str) -> np.ndarray:
+    with h5py.File(path, "r") as f:
+        charges_oh = f["precursor_charge_onehot"][:]
+    return np.argmax(charges_oh, axis=1) + 1
 
-min_charge = 10
-max_charge = 0
 
-for charge in charges:
-    min_charge = min(min_charge, charge)
-    max_charge = max(charge, max_charge)
+def build_batch(
+    f: h5py.File,
+    charges: np.ndarray,
+    start: int,
+    end: int,
+) -> dict:
+    """Load một batch từ HDF5, trả về dict tensor đã ở trên device."""
+    raw_intensities = f["intensities_raw"][start:end]
+    raw_seqs = f["sequence_integer"][start:end]
+    batch_charges = charges[start:end]
 
-print(f"Min charge: {min_charge}")
-print(f"Max charge: {max_charge}")
+    mask_np = create_batch_fragment_mask_from_peptide(raw_seqs, batch_charges)
 
-epoch = 6
-batch_size = 256
-model_layer = 4
-pep_layer = 4
+    # intensity: [0,1] → encode theo PREPROCESS_MODE
+    intensity_01 = torch.tensor(
+        process_intensity_vector(raw_intensities), dtype=torch.float64
+    )
+    intensity_latent = preprocessor.encode(intensity_01)
 
-# model_path = r"E:\Dai hoc\2526I\dacn\flow-matching\run_real_data\checkpoints\tfmemb_adaln6_8e.pth"
+    return {
+        "intensity_latent": intensity_latent,
+        "intensity_01": intensity_01,
+        "pep_seq": torch.tensor(raw_seqs, dtype=torch.long),
+        "charge": torch.tensor(batch_charges, dtype=torch.long).unsqueeze(1),
+        "mask": torch.tensor(mask_np, dtype=torch.bool),
+    }
+
+
+def compute_flow_target(
+    noise: torch.Tensor,
+    x1: torch.Tensor,
+    t: torch.Tensor,
+    batch: dict,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Tính x_t và velocity target tuỳ theo preprocessing mode.
+
+    Euclidean (raw/logit):
+        x_t  = (1 - t) * noise + t * x1   [linear interpolation]
+        u*   = x1 - noise                  [constant vector field]
+
+    Sphere:
+        x_t  = SLERP(noise, x1, t)        [geodesic interpolation]
+        u*   = Log_{x_t}(x1) / (1-t)      [tangent vector field]
+    """
+    if preprocessor.mode == PreprocessMode.SPHERE:
+        x_t, target = preprocessor.sphere_target_vector(noise, x1, t)
+    else:
+        x_t = get_xt(noise, x1, t, sigma=C.SIGMA)
+        target = x1 - noise
+    return x_t, target
+
+
+# ────────────────────────────────────────────────────────────
+# Model & Optimizer
+# ────────────────────────────────────────────────────────────
 model = DiffusionFlow(
-    d_noise=6, d_model=256, num_layers=model_layer, num_pep_layers=model_layer
-)
+    d_noise=C.D_NOISE,
+    d_model=C.D_MODEL,
+    num_layers=C.MODEL_LAYERS,
+    num_pep_layers=C.PEP_LAYERS,
+).to(device)
+
 optimizer = torch.optim.AdamW(
-    model.parameters(), eps=1e-8, lr=2e-4, weight_decay=2e-3
-)
-# model.load_state_dict(torch.load(model_path))
-
-print(
-    f"Num params: {sum(p.numel() for p in model.parameters() if p.requires_grad)}"
+    model.parameters(),
+    lr=C.LR,
+    eps=C.ADAM_EPS,
+    weight_decay=C.WEIGHT_DECAY,
 )
 
 print(
-    f"Num params of pep embedding: {
-        sum(p.numel()
-        for p in model.peptide_embedding.parameters()
-        if p.requires_grad)
-        }"
+    f"[bold]Model params:[/bold] {sum(p.numel() for p in model.parameters() if p.requires_grad):,}"
+)
+print(
+    f"[bold]Pep embedding params:[/bold] "
+    f"{sum(p.numel() for p in model.peptide_embedding.parameters() if p.requires_grad):,}"
 )
 
-loss_history = []
-last_100_loss = []
+
+# ────────────────────────────────────────────────────────────
+# Tracking
+# ────────────────────────────────────────────────────────────
+loss_history: list[float] = []
+rolling_buffer: list[float] = []
+
+metrics: dict[str, list[float]] = {
+    "pcc_mask": [],
+    "sa_mask": [],
+    "pcc_raw": [],
+    "sa_raw": [],
+}
 
 
-pbar = tqdm(range(int(epoch)), desc="Training")
+# ────────────────────────────────────────────────────────────
+# Training
+# ────────────────────────────────────────────────────────────
+charges = load_charges(C.TRAIN_PATH)
 num_samples = len(charges)
-num_batches = math.ceil(num_samples / batch_size)
+num_batches = math.ceil(num_samples / C.BATCH_SIZE)
 
-validate_pcc_mask = []
-validate_sa_mask = []
-validate_pcc_nor = []
-validate_sa_nor = []
-validate_sa_rev_mask = []
-validate_pcc_rev_mask = []
+print(
+    f"[bold]Dataset:[/bold] {num_samples:,} samples | "
+    f"{num_batches} batches/epoch | mode=[yellow]{C.PREPROCESS_MODE}[/yellow]"
+)
+
+pbar = tqdm(range(C.EPOCHS), desc="Epoch")
 start_time = time()
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model.to(device)
-
-with h5py.File(train_path, "r") as f:
+with h5py.File(C.TRAIN_PATH, "r") as f:
     for ep in pbar:
         model.train()
 
         for b in range(num_batches):
             optimizer.zero_grad()
-            start = b * batch_size
-            end = min((b + 1) * batch_size, num_samples)
 
-            batch_np_intensities = f["intensities_raw"][start:end]
-            batch_np_seqs = f["sequence_integer"][start:end]
-            batch_np_charges = charges[start:end]
+            start = b * C.BATCH_SIZE
+            end = min((b + 1) * C.BATCH_SIZE, num_samples)
 
-            batch_np_mask = create_batch_fragment_mask_from_peptide(
-                batch_np_seqs, batch_np_charges
-            )
+            batch = build_batch(f, charges, start, end)
+            x1 = batch["intensity_latent"]
+            noise = torch.randn_like(x1)
 
-            batch_intensities = torch.logit(
-                torch.tensor(
-                    process_intensity_vector(batch_np_intensities),
-                    dtype=torch.float64,
-                ),
-                eps=1e-4,
-            )
-            batch_pep_seq = torch.tensor(batch_np_seqs, dtype=torch.long)
-            batch_charge = torch.tensor(
-                batch_np_charges, dtype=torch.long
-            ).unsqueeze(1)
+            # Với sphere mode, noise phải nằm trên S^(d-1)
+            if preprocessor.mode == PreprocessMode.SPHERE:
+                noise = preprocessor.encode(torch.sigmoid(noise))
 
-            batch_mask = torch.tensor(batch_np_mask, dtype=torch.bool)
-
-            noise = torch.randn_like(batch_intensities)
             t = torch.rand(end - start, 1)
+            x_t, target = compute_flow_target(noise, x1, t, batch)
 
-            x_t = get_xt(noise, batch_intensities, t, sigma=1e-5)
             u_pred = model(
-                noise_tokens=x_t, time=t, pep=batch_pep_seq, charge=batch_charge
+                noise_tokens=x_t,
+                time=t,
+                pep=batch["pep_seq"],
+                charge=batch["charge"],
             )
 
-            loss = masked_mse_loss(
-                u_pred, batch_intensities - noise, batch_mask
-            )
+            loss = masked_mse_loss(u_pred, target, batch["mask"])
             loss.backward()
             optimizer.step()
 
-            last_100_loss.append(loss.item())
+            rolling_buffer.append(loss.item())
 
-            if len(last_100_loss) == 10:
-                mean_last_100 = sum(last_100_loss) / len(last_100_loss)
-                last_100_loss.clear()
-                loss_history.append(mean_last_100)
+            # ── Log mỗi LOG_EVERY_N_BATCHES ──────────────────
+            if len(rolling_buffer) >= C.LOG_EVERY_N_BATCHES:
+                mean_loss = sum(rolling_buffer) / len(rolling_buffer)
+                rolling_buffer.clear()
+                loss_history.append(mean_loss)
 
+                avg_loss = sum(loss_history) / len(loss_history)
                 pbar.set_postfix(
-                    {
-                        "Last100": f"{mean_last_100:.4f}",
-                        "Avg": f"{(sum(loss_history)/len(loss_history)):.4f}",
-                    }
+                    {"rolling": f"{mean_loss:.4f}", "avg": f"{avg_loss:.4f}"}
                 )
-                if len(loss_history) % 10 == 0:
-                    with torch.no_grad():  # validate batch
-                        model.eval()
-                        batch_intensities = torch.sigmoid(
-                            batch_intensities[0:32]
-                        )
-                        batch_pep_seq = batch_pep_seq[0:32]
-                        batch_charge = batch_charge[0:32]
-                        batch_mask = batch_mask[0:32]
-                        noise = torch.randn_like(batch_intensities)
 
-                        generated_batch = torch.sigmoid(
-                            model.sample(
-                                noise, batch_pep_seq, batch_charge, step=10
-                            )
-                        )
-                        score_pcc_mask = pcc(
-                            generated_batch, batch_intensities, batch_mask
-                        )
-                        score_sa_mask = sa(
-                            generated_batch, batch_intensities, batch_mask
-                        )
-                        score_pcc_nor = pcc(generated_batch, batch_intensities)
-                        score_sa_nor = sa(generated_batch, batch_intensities)
+                # ── Validate ──────────────────────────────────
+                n_logs = len(loss_history)
+                if n_logs % C.VALIDATE_EVERY_N_LOGS == 0:
+                    _run_validation(model, batch, preprocessor, metrics, n_logs)
 
-                        if len(loss_history) % 100 == 0:
-                            print(
-                                f"Score PCC Mask: {score_pcc_mask[0]:.4f},\n"
-                                f"Score SA Mask: {score_sa_mask[0]:.4f},\n"
-                                f"Score PCC Raw: {score_pcc_nor[0]:.4f},\n"
-                                f"Score SA Raw: {score_sa_nor[0]:.4f}"
-                            )
-
-                        validate_pcc_mask.append(score_pcc_mask[0])
-                        validate_sa_mask.append(score_sa_mask[0])
-                        validate_pcc_nor.append(score_pcc_nor[0])
-                        validate_sa_nor.append(score_sa_nor[0])
-                    model.train()
-
-
+# ────────────────────────────────────────────────────────────
+# Save & Plot
+# ────────────────────────────────────────────────────────────
 end_time = time()
-print(f"Total training time: {end_time - start_time} ms")
-torch.save(
-    model.state_dict(),
-    f"{datetime.fromtimestamp(end_time)}_tfm_diffusion_{model_layer}_{pep_layer}_{batch_size}_{epoch}e.pth",
+print(f"[bold green]Training time: {end_time - start_time:.1f}s[/bold green]")
+
+ckpt_name = (
+    f"{datetime.fromtimestamp(end_time)}_"
+    f"fm_{C.PREPROCESS_MODE}_{C.MODEL_LAYERS}l_"
+    f"bs{C.BATCH_SIZE}_{C.EPOCHS}e.pth"
 )
+torch.save(model.state_dict(), ckpt_name)
+print(f"[bold]Saved:[/bold] {ckpt_name}")
 
 plot_loss_history(loss_history)
-plot_loss_history(validate_pcc_mask, "PCC_SCORE_MASK_tfm")
-plot_loss_history(validate_sa_mask, "SA_SCORE_MASK_tfm")
-plot_loss_history(validate_pcc_nor, "PCC_SCORE_NOR_tfm")
-plot_loss_history(validate_sa_nor, "SA_SCORE_NOR_tfm")
+for key, vals in metrics.items():
+    if vals:
+        plot_loss_history(vals, f"{key.upper()}_{C.PREPROCESS_MODE}")
+
+
+# ────────────────────────────────────────────────────────────
+# Validation (tách hàm để train loop gọn)
+# ────────────────────────────────────────────────────────────
+def _run_validation(
+    model: torch.nn.Module,
+    last_batch: dict,
+    prep: Preprocessor,
+    metrics: dict,
+    n_logs: int,
+):
+    model.eval()
+    with torch.no_grad():
+        n = C.VALIDATE_BATCH_SIZE
+        intensity_01 = last_batch["intensity_01"][:n]
+        pep_seq = last_batch["pep_seq"][:n]
+        charge = last_batch["charge"][:n]
+        mask = last_batch["mask"][:n]
+
+        # Noise phù hợp với mode
+        noise = torch.randn_like(intensity_01)
+        if prep.mode == PreprocessMode.SPHERE:
+            noise = prep.encode(torch.sigmoid(noise))
+
+        # Sample từ model (trả về latent)
+        gen_latent = model.sample(noise, pep_seq, charge, step=C.ODE_STEPS)
+        gen_01 = prep.decode(gen_latent)
+
+        score_pcc_mask = pcc(gen_01, intensity_01, mask)
+        score_sa_mask = sa(gen_01, intensity_01, mask)
+        score_pcc_raw = pcc(gen_01, intensity_01)
+        score_sa_raw = sa(gen_01, intensity_01)
+
+        metrics["pcc_mask"].append(score_pcc_mask[0])
+        metrics["sa_mask"].append(score_sa_mask[0])
+        metrics["pcc_raw"].append(score_pcc_raw[0])
+        metrics["sa_raw"].append(score_sa_raw[0])
+
+        if n_logs % C.PRINT_SCORE_EVERY_N_LOGS == 0:
+            print(
+                f"\n[cyan]── Validation (log #{n_logs}) ──[/cyan]\n"
+                f"  PCC Mask : {score_pcc_mask[0]:.4f}\n"
+                f"  SA  Mask : {score_sa_mask[0]:.4f}\n"
+                f"  PCC Raw  : {score_pcc_raw[0]:.4f}\n"
+                f"  SA  Raw  : {score_sa_raw[0]:.4f}"
+            )
+    model.train()
