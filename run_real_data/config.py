@@ -48,7 +48,7 @@ ODE_STEPS: int = 10
 
 # ─── Logging ────────────────────────────────────────────────
 # Tổng hợp loss mỗi bao nhiêu batch
-LOG_EVERY_N_BATCHES: int = 10
+LOG_EVERY_N_BATCHES: int = 100
 
 # Validate mỗi bao nhiêu lần log
 VALIDATE_EVERY_N_LOGS: int = 10

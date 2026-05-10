@@ -148,6 +148,53 @@ metrics: dict[str, list[float]] = {
     "sa_raw": [],
 }
 
+# ────────────────────────────────────────────────────────────
+# Validation (tách hàm để train loop gọn)
+# ────────────────────────────────────────────────────────────
+def _run_validation(
+    model: torch.nn.Module,
+    last_batch: dict,
+    prep: Preprocessor,
+    metrics: dict,
+    n_logs: int,
+):
+    model.eval()
+    with torch.no_grad():
+        n = C.VALIDATE_BATCH_SIZE
+        intensity_01 = last_batch["intensity_01"][:n]
+        pep_seq = last_batch["pep_seq"][:n]
+        charge = last_batch["charge"][:n]
+        mask = last_batch["mask"][:n]
+
+        # Noise phù hợp với mode
+        noise = torch.randn_like(intensity_01)
+        if prep.mode == PreprocessMode.SPHERE:
+            noise = prep.encode(torch.sigmoid(noise))
+
+        # Sample từ model (trả về latent)
+        gen_latent = model.sample(noise, pep_seq, charge, step=C.ODE_STEPS)
+        gen_01 = prep.decode(gen_latent)
+
+        score_pcc_mask = pcc(gen_01, intensity_01, mask)
+        score_sa_mask = sa(gen_01, intensity_01, mask)
+        score_pcc_raw = pcc(gen_01, intensity_01)
+        score_sa_raw = sa(gen_01, intensity_01)
+
+        metrics["pcc_mask"].append(score_pcc_mask[0])
+        metrics["sa_mask"].append(score_sa_mask[0])
+        metrics["pcc_raw"].append(score_pcc_raw[0])
+        metrics["sa_raw"].append(score_sa_raw[0])
+
+        if n_logs % C.PRINT_SCORE_EVERY_N_LOGS == 0:
+            print(
+                f"\n[cyan]── Validation (log #{n_logs}) ──[/cyan]\n"
+                f"  PCC Mask : {score_pcc_mask[0]:.4f}\n"
+                f"  SA  Mask : {score_sa_mask[0]:.4f}\n"
+                f"  PCC Raw  : {score_pcc_raw[0]:.4f}\n"
+                f"  SA  Raw  : {score_sa_raw[0]:.4f}"
+            )
+    model.train()
+
 
 # ────────────────────────────────────────────────────────────
 # Training
@@ -234,49 +281,3 @@ for key, vals in metrics.items():
         plot_loss_history(vals, f"{key.upper()}_{C.PREPROCESS_MODE}")
 
 
-# ────────────────────────────────────────────────────────────
-# Validation (tách hàm để train loop gọn)
-# ────────────────────────────────────────────────────────────
-def _run_validation(
-    model: torch.nn.Module,
-    last_batch: dict,
-    prep: Preprocessor,
-    metrics: dict,
-    n_logs: int,
-):
-    model.eval()
-    with torch.no_grad():
-        n = C.VALIDATE_BATCH_SIZE
-        intensity_01 = last_batch["intensity_01"][:n]
-        pep_seq = last_batch["pep_seq"][:n]
-        charge = last_batch["charge"][:n]
-        mask = last_batch["mask"][:n]
-
-        # Noise phù hợp với mode
-        noise = torch.randn_like(intensity_01)
-        if prep.mode == PreprocessMode.SPHERE:
-            noise = prep.encode(torch.sigmoid(noise))
-
-        # Sample từ model (trả về latent)
-        gen_latent = model.sample(noise, pep_seq, charge, step=C.ODE_STEPS)
-        gen_01 = prep.decode(gen_latent)
-
-        score_pcc_mask = pcc(gen_01, intensity_01, mask)
-        score_sa_mask = sa(gen_01, intensity_01, mask)
-        score_pcc_raw = pcc(gen_01, intensity_01)
-        score_sa_raw = sa(gen_01, intensity_01)
-
-        metrics["pcc_mask"].append(score_pcc_mask[0])
-        metrics["sa_mask"].append(score_sa_mask[0])
-        metrics["pcc_raw"].append(score_pcc_raw[0])
-        metrics["sa_raw"].append(score_sa_raw[0])
-
-        if n_logs % C.PRINT_SCORE_EVERY_N_LOGS == 0:
-            print(
-                f"\n[cyan]── Validation (log #{n_logs}) ──[/cyan]\n"
-                f"  PCC Mask : {score_pcc_mask[0]:.4f}\n"
-                f"  SA  Mask : {score_sa_mask[0]:.4f}\n"
-                f"  PCC Raw  : {score_pcc_raw[0]:.4f}\n"
-                f"  SA  Raw  : {score_sa_raw[0]:.4f}"
-            )
-    model.train()
