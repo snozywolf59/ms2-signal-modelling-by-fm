@@ -58,89 +58,50 @@ class Modulation(nn.Module):
         return a, b, c, d, e, f  # 6 x [B, d_model]
 
 
-class NoiseDiffusionEncoderLayer(nn.Module):
+class AdaLnLayer(nn.Module):
     def __init__(self, d_model, nhead, dim_feedforward, cond_dim):
         super().__init__()
-
-        self.joint_attn = nn.MultiheadAttention(
-            d_model, nhead, batch_first=True
-        )
-
-        self.norm1_x = nn.LayerNorm(d_model)
-        self.norm1_c = nn.LayerNorm(d_model)
-        self.norm2_x = nn.LayerNorm(d_model)
-        self.norm2_c = nn.LayerNorm(d_model)
-        self.mod_x = Modulation(d_model, cond_dim)
-        self.mod_c = Modulation(d_model, cond_dim)
-
-        self.before_attn_linear_x = nn.Linear(d_model, d_model)
-        self.before_attn_linear_y = nn.Linear(d_model, d_model)
-
-        self.after_attn_linear_x = nn.Linear(d_model, d_model)
-        self.after_attn_linear_y = nn.Linear(d_model, d_model)
-
-        self.ffn_x = nn.Sequential(
-            nn.Linear(d_model, dim_feedforward),
-            nn.SiLU(),
-            nn.Linear(dim_feedforward, d_model),
-        )
-        self.ffn_c = nn.Sequential(
+        self.self_attn = nn.MultiheadAttention(d_model, nhead, batch_first=True)
+        self.mod = Modulation(d_model, cond_dim)
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.ff = nn.Sequential(
             nn.Linear(d_model, dim_feedforward),
             nn.SiLU(),
             nn.Linear(dim_feedforward, d_model),
         )
 
-    def forward(self, x, c, y_emb, x_mask=None, c_mask=None):
-        # calculate modulation parameters
-        ax, bx, cx, dx, ex, fx = self.mod_x(y_emb)
+        self.cond_mlp = nn.Sequential(
+            nn.Linear(cond_dim, cond_dim),
+            nn.SiLU(),
+            nn.Linear(cond_dim, cond_dim),
+        )
 
-        ac, bc, cc, dc, ec, fc = self.mod_c(y_emb)
+    def forward(self, x, y_emb):
+        a, b, c, d, e, f = self.mod(self.cond_mlp(y_emb))
 
-        ax, bx, cx, dx, ex, fx = [
-            t.unsqueeze(1) for t in (ax, bx, cx, dx, ex, fx)
-        ]
-        ac, bc, cc, dc, ec, fc = [
-            t.unsqueeze(1) for t in (ac, bc, cc, dc, ec, fc)
-        ]
+        old_x = x
+        # first modulation
+        x = self.norm1(x)
+        x = x * (1 + a.unsqueeze(1)) + b.unsqueeze(1)
 
-        res_x = x
-        res_c = c
+        # Self-attention on x
+        x, _ = self.self_attn(x, x, x)
 
-        x = self.norm1_x(x) * ax + bx
-        c = self.norm1_c(c) * ac + bc
+        # scale and residual connection
+        x = old_x + x * c.unsqueeze(1)
+        old_x = x
 
-        x = self.before_attn_linear_x(x)
-        c = self.before_attn_linear_y(c)
+        # second modulation
+        x = self.norm2(old_x)
+        x = x * (1 + d.unsqueeze(1)) + e.unsqueeze(1)
 
-        # 2. Joint Attention
-        batch_size, len_x, _ = x.shape
-        _, len_c, _ = c.shape
+        # Feedforward
+        x = self.ff(x)
 
-        # Gộp token noise (x) và peptide (c)
-        joint_tokens = torch.cat([x, c], dim=1)  # [B, len_x + len_c, d_model]
+        x = old_x + x * f.unsqueeze(1)
 
-        # Nếu có mask, cũng cần gộp mask (chú ý: MultiheadAttention batch_first dùng key_padding_mask)
-        # joint_mask = torch.cat([x_mask, c_mask], dim=1) if x_mask is not None else None
-
-        # Self-attention
-        attn_out, _ = self.joint_attn(joint_tokens, joint_tokens, joint_tokens)
-
-        # Tách c và x từ đầu
-        x = attn_out[:, :len_x, :]
-        c = attn_out[:, len_x:, :]
-
-        # Residual
-        x = res_x + self.after_attn_linear_x(x) * cx
-        c = res_c + self.after_attn_linear_y(c) * cc
-
-        x = self.norm2_x(x) * dx + ex
-        c = self.norm2_c(c) * dc + ec
-
-        # 3. Feed Forward
-        x = res_x + self.ffn_x(x) * fx
-        c = res_c + self.ffn_c(c) * fc
-
-        return x, c
+        return x
 
 
 class DiffusionFlow(nn.Module):
@@ -149,7 +110,7 @@ class DiffusionFlow(nn.Module):
         self,
         d_noise,
         d_model,
-        nhead=8,
+        nhead=2,
         num_layers=6,
         num_pep_layers=6,
         charge_dim=8,
@@ -163,22 +124,16 @@ class DiffusionFlow(nn.Module):
         self.pep_embedding = TfmConditionEncoder(
             d_model, num_pep_layers, charge_dim=charge_dim
         )
-        self.noise_projection = NoiseProjection(d_noise, d_model)
 
         self.blocks = nn.ModuleList(
             [
-                NoiseDiffusionEncoderLayer(
-                    d_model, nhead, d_model, cond_dim=cond_dim
-                )
+                AdaLnLayer(d_noise, nhead, d_model, cond_dim=cond_dim)
                 for _ in range(num_layers)
             ]
         )
 
-        # self.cond_proj = nn.Linear(time_dim + charge_dim, d_model)
-
         self.final_norm = nn.LayerNorm(d_noise)
-
-        self.output_proj = ReverseNoiseProjection(d_model, d_noise)
+        self.line_out = nn.Linear(d_noise, d_noise)
 
     @property
     def peptide_embedding(self):
@@ -186,28 +141,36 @@ class DiffusionFlow(nn.Module):
 
     def forward(
         self,
-        noise: torch.Tensor,  # B, 29, 6
+        noise_tokens: torch.Tensor,  # B, 29, 6
         pep: torch.Tensor,  # B, L
         charge: torch.Tensor,  # B
         time: torch.Tensor,  # B
     ):
 
-        noise_tokens = self.noise_projection(noise)
+        # noise_tokens = self.noise_projection(noise_tokens)
 
         pep_tokens = self.pep_embedding(pep, charge)  # B, L, d_model
-        # pep_padding_mask = pep == 0
+        pep_padding_mask = pep == 0
+
+        mask = (~pep_padding_mask).unsqueeze(-1)  # B, L, 1
+
+        pep_sum = (pep_tokens * mask).sum(dim=1)  # B, d_model
+        pep_len = mask.sum(dim=1)  # B, 1
+
+        pep_mean = pep_sum / pep_len.clamp(min=1)
 
         time_emb = self.time_embedding(time)  # B, time dim
-        mean_pep_emb = pep_tokens.mean(dim=1)  # B, d_model
-        y_emb = torch.cat([time_emb, mean_pep_emb], dim=-1)  # B, cond_dim
+
+        y_emb = torch.cat([time_emb, pep_mean], dim=-1)  # B, cond_dim
 
         x = noise_tokens
-        c = pep_tokens
 
         for block in self.blocks:
-            x, c = block(x, c, y_emb)
+            x = block(x, y_emb)
 
-        return self.final_norm(self.output_proj(x))
+        x = self.final_norm(x)
+        x = self.line_out(x)
+        return x
 
     def step(
         self,

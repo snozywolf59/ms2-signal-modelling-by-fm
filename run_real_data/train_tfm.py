@@ -136,7 +136,7 @@ with h5py.File(train_path, "r") as f:
 
             x_t = get_xt(noise, batch_intensities, t, sigma=1e-5)
             u_pred = model(
-                noise=x_t, time=t, pep=batch_pep_seq, charge=batch_charge
+                noise_tokens=x_t, time=t, pep=batch_pep_seq, charge=batch_charge
             )
 
             loss = masked_mse_loss(

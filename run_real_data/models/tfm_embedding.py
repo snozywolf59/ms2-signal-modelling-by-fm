@@ -17,8 +17,8 @@ class TimeEmbedding(nn.Module):
         self.d_out = d_out
 
     def forward(self, t: torch.Tensor):
-        t_emb = sinusoidal_time_embedding(t, self.d_out)
-        return self.embedding(t_emb)
+        return sinusoidal_time_embedding(t, self.d_out)
+        # return self.embedding(t_emb)
 
 
 class TfmConditionEncoder(nn.Module):
