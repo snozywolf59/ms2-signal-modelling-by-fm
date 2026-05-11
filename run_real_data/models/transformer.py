@@ -2,8 +2,11 @@ import torch
 from torch import nn
 
 from .cfg_based import CFGFlow
-from .tfm_embedding import TfmConditionEncoder, TimeEmbedding
-
+from .tfm_embedding import (
+    TfmConditionEncoder,
+    TimeEmbedding,
+    sinusoidal_position_encoding,
+)
 
 # class NoiseProjection(nn.Module):
 #     def __init__(self, d_in: int, d_model: int):
@@ -75,7 +78,6 @@ class AdaLnLayer(nn.Module):
             nn.Linear(dim_feedforward, d_model),
         )
 
-
     def forward(self, x, y_emb):
         a, b, c, d, e, f = self.mod(y_emb)
 
@@ -126,13 +128,19 @@ class DiffusionFlow(nn.Module):
 
         self.blocks = nn.ModuleList(
             [
-                AdaLnLayer(d_noise, nhead, d_model, cond_dim=cond_dim)
+                AdaLnLayer(d_noise, nhead, d_noise, cond_dim=cond_dim)
                 for _ in range(num_layers)
             ]
         )
 
         self.final_norm = nn.LayerNorm(d_noise)
         self.line_out = nn.Linear(d_noise, d_noise)
+
+        self.register_buffer(
+            "pos_encoding",
+            sinusoidal_position_encoding(29, d_noise),
+            persistent=False,
+        )
 
     @property
     def peptide_embedding(self):
@@ -163,6 +171,9 @@ class DiffusionFlow(nn.Module):
         y_emb = torch.cat([time_emb, pep_mean], dim=-1)  # B, cond_dim
 
         x = noise_tokens
+
+        pos = self.pos_encoding[: x.size(1), :].unsqueeze(0)  # 1, 29, d_model
+        x = x + pos  # pos encoding
 
         for block in self.blocks:
             x = block(x, y_emb)

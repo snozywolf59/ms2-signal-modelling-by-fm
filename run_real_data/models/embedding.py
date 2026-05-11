@@ -134,10 +134,13 @@ class TfmEmbedding(nn.Module):
     def forward(
         self, seq: torch.Tensor, charge: torch.Tensor, time: torch.Tensor
     ):
+        mask = ~(seq == 0) # B, L
         pep_emb = self.pep_embedding(seq) + sinusoidal_position_encoding(
             seq.size(1), self.pep_embedding.embedding_dim
-        ).unsqueeze(0)
-        pep_c = self.transformer(pep_emb).mean(dim=1)
+        ).unsqueeze(0) # B, L, d_model
+
+        pep_sum = (pep_emb * mask.unsqueeze(-1)).sum(dim=1)
+        pep_c = pep_sum / mask.sum(dim=1, keepdim=True).clamp(min=1)
         # charge_emb = sinusoidal_time_embedding(charge, self.charge_dim)
         charge_emb = self.charge_embedding(charge)
         time_emb = sinusoidal_time_embedding(time, self.time_dim)
