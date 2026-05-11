@@ -276,7 +276,7 @@ end_time = time()
 print(f"[bold green]Training time: {end_time - start_time:.1f}s[/bold green]")
 
 ckpt_name = (
-    f"{datetime.fromtimestamp(end_time)}_"
+    f"MLP_{datetime.fromtimestamp(end_time)}_"
     f"fm_{C.PREPROCESS_MODE}_{C.MODEL_LAYERS}l_"
     f"bs{C.BATCH_SIZE}_{C.EPOCHS}e.pth"
 )
