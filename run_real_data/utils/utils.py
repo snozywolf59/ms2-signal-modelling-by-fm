@@ -231,21 +231,24 @@ def create_batch_fragment_mask_from_peptide(
 
 
 def process_intensity_vector(
-    intensity_vector: Union[torch.Tensor, np.ndarray],
+    intensity_vector: Union[torch.Tensor, np.ndarray], reshape
 ) -> Union[torch.Tensor, np.ndarray]:
     # turn (B, 174)  into (B, 29, 6) with 6 channels: y1, y2, y3, b1, b2, b3
     batch_size = intensity_vector.shape[0]
     if intensity_vector.shape[-1] != 174:
         raise ValueError("Input vector must have length 174")
     
-    intensity_vector[intensity_vector < 0] = 0
+    # intensity_vector[intensity_vector < 0] = 0
 
     if isinstance(intensity_vector, torch.Tensor):
-        return intensity_vector.reshape(batch_size, 29, 6)
+        if reshape:
+            return intensity_vector.reshape(batch_size, 29, 6)
+        return intensity_vector
 
     elif isinstance(intensity_vector, np.ndarray):
-        return intensity_vector.reshape(batch_size, 29, 6)
-
+        if reshape:
+            return intensity_vector.reshape(batch_size, 29, 6)
+        return intensity_vector
     else:
         raise TypeError("Input must be torch.Tensor or np.ndarray")
 

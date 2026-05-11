@@ -34,7 +34,9 @@ MODEL_LAYERS: int = 4
 PEP_LAYERS: int = 4
 
 # ─── Training ───────────────────────────────────────────────
-EPOCHS: int = 6
+TRAIN_SAMPLE_SIZE: int = 256000
+
+EPOCHS: int = 10
 BATCH_SIZE: int = 256
 LR: float = 2e-4
 WEIGHT_DECAY: float = 2e-3
@@ -51,7 +53,7 @@ ODE_STEPS: int = 10
 LOG_EVERY_N_BATCHES: int = 100
 
 # Validate mỗi bao nhiêu lần log
-VALIDATE_EVERY_N_LOGS: int = 10
+VALIDATE_EVERY_N_LOGS: int = 1
 
 # In score ra console mỗi bao nhiêu lần log
 PRINT_SCORE_EVERY_N_LOGS: int = 100

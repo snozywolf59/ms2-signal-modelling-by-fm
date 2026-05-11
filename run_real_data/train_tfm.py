@@ -177,21 +177,21 @@ def _run_validation(
 
         score_pcc_mask = pcc(gen_01, intensity_01, mask)
         score_sa_mask = sa(gen_01, intensity_01, mask)
-        score_pcc_raw = pcc(gen_01, intensity_01)
-        score_sa_raw = sa(gen_01, intensity_01)
+        # score_pcc_raw = pcc(gen_01, intensity_01)
+        # score_sa_raw = sa(gen_01, intensity_01)
 
         metrics["pcc_mask"].append(score_pcc_mask[0])
         metrics["sa_mask"].append(score_sa_mask[0])
-        metrics["pcc_raw"].append(score_pcc_raw[0])
-        metrics["sa_raw"].append(score_sa_raw[0])
+        # metrics["pcc_raw"].append(score_pcc_raw[0])
+        # metrics["sa_raw"].append(score_sa_raw[0])
 
         if n_logs % C.PRINT_SCORE_EVERY_N_LOGS == 0:
             print(
                 f"\n[cyan]── Validation (log #{n_logs}) ──[/cyan]\n"
                 f"  PCC Mask : {score_pcc_mask[0]:.4f}\n"
                 f"  SA  Mask : {score_sa_mask[0]:.4f}\n"
-                f"  PCC Raw  : {score_pcc_raw[0]:.4f}\n"
-                f"  SA  Raw  : {score_sa_raw[0]:.4f}"
+                # f"  PCC Raw  : {score_pcc_raw[0]:.4f}\n"
+                # f"  SA  Raw  : {score_sa_raw[0]:.4f}"
             )
     model.train()
 

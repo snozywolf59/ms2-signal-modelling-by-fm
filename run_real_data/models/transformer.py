@@ -5,31 +5,31 @@ from .cfg_based import CFGFlow
 from .tfm_embedding import TfmConditionEncoder, TimeEmbedding
 
 
-class NoiseProjection(nn.Module):
-    def __init__(self, d_in: int, d_model: int):
-        super().__init__()
-        self.projection = nn.Sequential(
-            nn.Linear(d_in, 64),
-            nn.GELU(),
-            nn.Linear(64, d_model),
-            nn.LayerNorm(d_model),
-        )
+# class NoiseProjection(nn.Module):
+#     def __init__(self, d_in: int, d_model: int):
+#         super().__init__()
+#         self.projection = nn.Sequential(
+#             nn.Linear(d_in, 64),
+#             nn.GELU(),
+#             nn.Linear(64, d_model),
+#             nn.LayerNorm(d_model),
+#         )
 
-    def forward(self, noise: torch.Tensor):
-        return self.projection(noise)
+#     def forward(self, noise: torch.Tensor):
+#         return self.projection(noise)
 
 
-class ReverseNoiseProjection(nn.Module):
-    def __init__(self, d_model: int, d_out: int):
-        super().__init__()
-        self.projection = nn.Sequential(
-            nn.Linear(d_model, 64),
-            nn.GELU(),
-            nn.Linear(64, d_out),
-        )
+# class ReverseNoiseProjection(nn.Module):
+#     def __init__(self, d_model: int, d_out: int):
+#         super().__init__()
+#         self.projection = nn.Sequential(
+#             nn.Linear(d_model, 64),
+#             nn.GELU(),
+#             nn.Linear(64, d_out),
+#         )
 
-    def forward(self, x: torch.Tensor):
-        return self.projection(x)
+#     def forward(self, x: torch.Tensor):
+#         return self.projection(x)
 
 
 class AdaLayerNorm(nn.Module):
@@ -49,7 +49,11 @@ class AdaLayerNorm(nn.Module):
 class Modulation(nn.Module):
     def __init__(self, d_model, cond_dim):
         super().__init__()
-        self.mod = nn.Linear(cond_dim, 6 * d_model)
+        self.mod = nn.Sequential(
+            nn.Linear(cond_dim, 128),
+            nn.GELU(),
+            nn.Linear(128, 6 * d_model),
+        )
         self.act = nn.SiLU()
 
     def forward(self, cond):
@@ -71,14 +75,9 @@ class AdaLnLayer(nn.Module):
             nn.Linear(dim_feedforward, d_model),
         )
 
-        self.cond_mlp = nn.Sequential(
-            nn.Linear(cond_dim, cond_dim),
-            nn.SiLU(),
-            nn.Linear(cond_dim, cond_dim),
-        )
 
     def forward(self, x, y_emb):
-        a, b, c, d, e, f = self.mod(self.cond_mlp(y_emb))
+        a, b, c, d, e, f = self.mod(y_emb)
 
         old_x = x
         # first modulation
@@ -200,7 +199,3 @@ class DiffusionFlow(nn.Module):
             t = t_end
 
         return x_t
-
-
-class FluxFlow(nn.Module):
-    pass
