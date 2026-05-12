@@ -286,6 +286,6 @@ print(f"[bold]Saved:[/bold] {ckpt_name}")
 plot_loss_history(loss_history)
 for key, vals in metrics.items():
     if vals:
-        plot_loss_history(vals, f"{key.upper()}_{C.PREPROCESS_MODE}")
+        plot_loss_history(vals, f"{key.upper()}", f"MLP_{key.upper()}_{C.PREPROCESS_MODE}")
 
 

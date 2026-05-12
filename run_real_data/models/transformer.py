@@ -78,7 +78,7 @@ class AdaLnLayer(nn.Module):
             nn.Linear(dim_feedforward, d_model),
         )
 
-    def forward(self, x, y_emb):
+    def forward(self, x, y_emb, mask_x=None):
         a, b, c, d, e, f = self.mod(y_emb)
 
         old_x = x
@@ -87,7 +87,7 @@ class AdaLnLayer(nn.Module):
         x = x * (1 + a.unsqueeze(1)) + b.unsqueeze(1)
 
         # Self-attention on x
-        x, _ = self.self_attn(x, x, x)
+        x, _ = self.self_attn(x, x, x, key_padding_mask=mask_x)
 
         # scale and residual connection
         x = old_x + x * c.unsqueeze(1)
@@ -128,7 +128,7 @@ class DiffusionFlow(nn.Module):
 
         self.blocks = nn.ModuleList(
             [
-                AdaLnLayer(d_noise, nhead, d_noise, cond_dim=cond_dim)
+                AdaLnLayer(d_noise, nhead, d_noise * 4, cond_dim=cond_dim)
                 for _ in range(num_layers)
             ]
         )
@@ -160,6 +160,9 @@ class DiffusionFlow(nn.Module):
         pep_padding_mask = pep == 0
 
         mask = (~pep_padding_mask).unsqueeze(-1)  # B, L, 1
+        
+        # init intensity padding mask - > B, L - 1, 1
+        intensity_masked = pep_padding_mask[:,1:]
 
         pep_sum = (pep_tokens * mask).sum(dim=1)  # B, d_model
         pep_len = mask.sum(dim=1)  # B, 1
@@ -176,7 +179,7 @@ class DiffusionFlow(nn.Module):
         x = x + pos  # pos encoding
 
         for block in self.blocks:
-            x = block(x, y_emb)
+            x = block(x, y_emb,mask_x=intensity_masked)
 
         x = self.final_norm(x)
         x = self.line_out(x)

@@ -40,7 +40,7 @@ def get_peptide_seq(integer_seq):
     )
 
 
-def plot_loss_history(loss_history, prefix="Loss_History", smooth_window=None):
+def plot_loss_history(loss_history, title ="Loss History", prefix="Loss_History", smooth_window=None):
     """
     Plot training loss history.
 

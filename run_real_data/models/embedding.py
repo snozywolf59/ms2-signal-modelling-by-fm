@@ -138,6 +138,8 @@ class TfmEmbedding(nn.Module):
         pep_emb = self.pep_embedding(seq) + sinusoidal_position_encoding(
             seq.size(1), self.pep_embedding.embedding_dim
         ).unsqueeze(0) # B, L, d_model
+        
+        pep_emb = self.transformer(pep_emb, src_key_padding_mask=~mask)
 
         pep_sum = (pep_emb * mask.unsqueeze(-1)).sum(dim=1)
         pep_c = pep_sum / mask.sum(dim=1, keepdim=True).clamp(min=1)

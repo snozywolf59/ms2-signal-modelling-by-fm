@@ -11,7 +11,7 @@ from .embedding import TfmEmbedding, ConcatEmbedding, PretrainEmbedding
 class ResBlock(nn.Module):
     def __init__(self, dim, cond_dim=None):
         super().__init__()
-        self.norm = nn.RMSNorm(dim)
+        self.norm = nn.LayerNorm(dim)
         self.fc1 = nn.Linear(dim, dim * 4)
         self.act = nn.SiLU()
         self.fc2 = nn.Linear(dim * 4, dim)
@@ -39,7 +39,7 @@ class ResMLPWithConditioning(nn.Module):
         self.blocks = nn.ModuleList(
            [ ResBlock(dim, cond_dim) for _ in range(num_blocks)]
         )
-        self.norm = nn.RMSNorm(dim)
+        self.norm = nn.LayerNorm(dim)
 
     def forward(self, x, condition):
         for block in self.blocks:

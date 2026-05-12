@@ -52,7 +52,10 @@ print(f"[bold cyan]Device:[/bold cyan] {device}")
 # ────────────────────────────────────────────────────────────
 def load_charges(path: str) -> np.ndarray:
     with h5py.File(path, "r") as f:
-        charges_oh = f["precursor_charge_onehot"][:]
+        if C.TRAIN_SAMPLE_SIZE > 0:
+            charges_oh = f["precursor_charge_onehot"][: C.TRAIN_SAMPLE_SIZE]
+        else:
+            charges_oh = f["precursor_charge_onehot"][:]
     return np.argmax(charges_oh, axis=1) + 1
 
 
@@ -71,7 +74,7 @@ def build_batch(
 
     # intensity: [0,1] → encode theo PREPROCESS_MODE
     intensity_01 = torch.tensor(
-        process_intensity_vector(raw_intensities), dtype=torch.float64
+        process_intensity_vector(raw_intensities, True), dtype=torch.float64
     )
     intensity_latent = preprocessor.encode(intensity_01)
 
@@ -222,14 +225,14 @@ with h5py.File(C.TRAIN_PATH, "r") as f:
             end = min((b + 1) * C.BATCH_SIZE, num_samples)
 
             batch = build_batch(f, charges, start, end)
-            x1 = batch["intensity_latent"]
+            x1 = batch["intensity_latent"] # B, 29, 6
             noise = torch.randn_like(x1)
 
-            # Với sphere mode, noise phải nằm trên S^(d-1)
             if preprocessor.mode == PreprocessMode.SPHERE:
                 noise = preprocessor.encode(torch.sigmoid(noise))
 
             t = torch.rand(end - start, 1)
+            # compute on flatten
             x_t, target = compute_flow_target(noise, x1, t, batch)
 
             u_pred = model(
@@ -240,6 +243,7 @@ with h5py.File(C.TRAIN_PATH, "r") as f:
             )
 
             loss = masked_mse_loss(u_pred, target, batch["mask"])
+            
             loss.backward()
             optimizer.step()
 
@@ -278,6 +282,6 @@ print(f"[bold]Saved:[/bold] {ckpt_name}")
 plot_loss_history(loss_history)
 for key, vals in metrics.items():
     if vals:
-        plot_loss_history(vals, f"{key.upper()}_{C.PREPROCESS_MODE}")
+        plot_loss_history(vals,f"{key.upper()}", f"TFM_{key.upper()}_{C.PREPROCESS_MODE}")
 
 

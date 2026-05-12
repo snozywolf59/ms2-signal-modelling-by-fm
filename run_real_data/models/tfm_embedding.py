@@ -60,6 +60,6 @@ class TfmConditionEncoder(nn.Module):
         x = torch.cat([pep_tokens, charge_tokens], dim=-1)
         pos = self.pos_encoding[: pep.size(1)].to(x.device)
         x = x + pos.unsqueeze(0)
-        # mask = pep == 0
+        mask = pep == 0
 
-        return self.tfm(x)
+        return self.tfm(x,src_key_padding_mask=mask)

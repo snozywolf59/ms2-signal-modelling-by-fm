@@ -34,29 +34,35 @@ MODEL_LAYERS: int = 4
 PEP_LAYERS: int = 4
 
 # ─── Training ───────────────────────────────────────────────
-TRAIN_SAMPLE_SIZE: int = 256000
+TRAIN_SAMPLE_SIZE: int = 51200
 
-EPOCHS: int = 10
+# CFG Scaling
+GUIDANCE_SCALE: float = 3.0
+COND_DROP_PROB: float = 0.1
+
+# training configuration
+
+EPOCHS: int = 100
 BATCH_SIZE: int = 256
 LR: float = 2e-4
-WEIGHT_DECAY: float = 2e-3
+WEIGHT_DECAY: float = 1e-4
 ADAM_EPS: float = 1e-8
 
 # Flow matching sigma (noise schedule)
-SIGMA: float = 1e-5
+SIGMA: float = 0
 
 # Bước ODE khi sample
 ODE_STEPS: int = 10
 
 # ─── Logging ────────────────────────────────────────────────
 # Tổng hợp loss mỗi bao nhiêu batch
-LOG_EVERY_N_BATCHES: int = 100
+LOG_EVERY_N_BATCHES: int = 50
 
 # Validate mỗi bao nhiêu lần log
-VALIDATE_EVERY_N_LOGS: int = 1
+VALIDATE_EVERY_N_LOGS: int = 10
 
 # In score ra console mỗi bao nhiêu lần log
-PRINT_SCORE_EVERY_N_LOGS: int = 100
+PRINT_SCORE_EVERY_N_LOGS: int = 10
 
 # Số sample dùng cho validation
 VALIDATE_BATCH_SIZE: int = 32
