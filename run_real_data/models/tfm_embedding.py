@@ -34,7 +34,7 @@ class TfmConditionEncoder(nn.Module):
         super().__init__()
 
         self.pep_embedding = nn.Embedding(
-            22, d_model - charge_dim, padding_idx=0
+            23, d_model - charge_dim, padding_idx=0
         )
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
@@ -45,7 +45,7 @@ class TfmConditionEncoder(nn.Module):
         self.tfm = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.register_buffer(
             "pos_encoding",
-            sinusoidal_position_encoding(max_len, d_model),
+            sinusoidal_position_encoding(max_len + 1, d_model),
             persistent=False,
         )
         self.charge_embedding = ChargeEmbedding(
@@ -53,6 +53,9 @@ class TfmConditionEncoder(nn.Module):
         )
 
     def forward(self, pep: torch.Tensor, charge: torch.Tensor):
+        pep = torch.cat(
+            [torch.full((pep.size(0), 1), 22, dtype=torch.long, device=pep.device), pep], dim=1
+        )  # B, L+1
         charge_emb = self.charge_embedding(charge)
         pep_tokens = self.pep_embedding(pep)
         B, L, _ = pep_tokens.shape
@@ -61,5 +64,5 @@ class TfmConditionEncoder(nn.Module):
         pos = self.pos_encoding[: pep.size(1)].to(x.device)
         x = x + pos.unsqueeze(0)
         mask = pep == 0
-
+        x = x.masked_fill(mask.unsqueeze(-1), 0)
         return self.tfm(x,src_key_padding_mask=mask)

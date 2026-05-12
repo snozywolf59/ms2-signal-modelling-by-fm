@@ -120,7 +120,7 @@ class TfmEmbedding(nn.Module):
         self.charge_dim = charge_dim
         self.time_dim = time_dim
 
-        self.pep_embedding = nn.Embedding(22, pep_dim, padding_idx=0)
+        self.pep_embedding = nn.Embedding(23, pep_dim, padding_idx=0)
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=pep_dim, nhead=8, dim_feedforward=1024, batch_first=True
         )
@@ -134,15 +134,22 @@ class TfmEmbedding(nn.Module):
     def forward(
         self, seq: torch.Tensor, charge: torch.Tensor, time: torch.Tensor
     ):
-        mask = ~(seq == 0) # B, L
-        pep_emb = self.pep_embedding(seq) + sinusoidal_position_encoding(
+        # add cls token
+        # cls token id = 22
+        seq = torch.cat(
+            [torch.full((seq.size(0), 1), 22, dtype=torch.long, device=seq.device), seq], dim=1
+        )  # B, L+1
+        mask = (seq == 0) # B, L
+        x = self.pep_embedding(seq) + sinusoidal_position_encoding(
             seq.size(1), self.pep_embedding.embedding_dim
         ).unsqueeze(0) # B, L, d_model
-        
-        pep_emb = self.transformer(pep_emb, src_key_padding_mask=~mask)
+        x = x.masked_fill(
+            mask.unsqueeze(-1),
+            0.0,
+        )
+        x = self.transformer(x, src_key_padding_mask=mask)
 
-        pep_sum = (pep_emb * mask.unsqueeze(-1)).sum(dim=1)
-        pep_c = pep_sum / mask.sum(dim=1, keepdim=True).clamp(min=1)
+        pep_c = x[:, 0, :]
         # charge_emb = sinusoidal_time_embedding(charge, self.charge_dim)
         charge_emb = self.charge_embedding(charge)
         time_emb = sinusoidal_time_embedding(time, self.time_dim)

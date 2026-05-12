@@ -27,7 +27,7 @@ class HCDFlow(CFGFlow):
     def __init__(self, noise_dim, embed_type: Literal["concat","pretrain","tfm"] = "tfm", pep_dim=128, time_dim=32, charge_dim=32):
         super().__init__(noise_dim)
         if embed_type == "tfm": 
-            self.cond_embedding = TfmEmbedding(pep_dim, time_dim, charge_dim)
+            self.cond_embedding = TfmEmbedding(pep_dim, time_dim, charge_dim, min_charge=1, num_blocks_pep=4)
         elif embed_type == "pretrain":
             self.cond_embedding = PretrainEmbedding()
         elif embed_type == "concat":
@@ -40,7 +40,7 @@ class HCDFlow(CFGFlow):
             total_cond_dim = 2 * pep_dim + noise_dim
         else:
             raise RuntimeError(f"Unimplement error: Embedding type {embed_type} not found.")
-        self.net = MLP(input_dim=total_cond_dim, output_dim=noise_dim, hidden_dim=1024, layers=4)
+        self.net = MLP(input_dim=total_cond_dim, output_dim=noise_dim, hidden_dim=1024, layers=2)
     
     @property
     def condition_embedding(self):

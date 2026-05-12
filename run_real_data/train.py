@@ -21,7 +21,7 @@ from tqdm.auto import tqdm
 
 import config as C
 from preprocess import Preprocessor, PreprocessMode
-from models import DiffusionFlow, HCDFlowResMLP
+from models import DiffusionFlow, HCDFlowResMLP, HCDFlow
 from utils.gen_path import get_xt
 from utils.metrics import pcc, sa
 from utils.utils import (
@@ -116,16 +116,21 @@ def compute_flow_target(
 # ────────────────────────────────────────────────────────────
 # Model & Optimizer
 # ────────────────────────────────────────────────────────────
-model = HCDFlowResMLP(
+# model = HCDFlowResMLP(
+#     noise_dim=174,
+#     pep_dim=256,
+#     time_dim=128,
+#     charge_dim=9,
+#     num_blocks=C.MODEL_LAYERS,
+#     num_blocks_pep=C.PEP_LAYERS,
+#     min_charge=1,
+#     max_charge=6,
+# )
+
+model = HCDFlow(
     noise_dim=174,
-    pep_dim=256,
-    time_dim=128,
-    charge_dim=9,
-    num_blocks=C.MODEL_LAYERS,
-    num_blocks_pep=C.PEP_LAYERS,
-    min_charge=1,
-    max_charge=6,
-)
+    pep_dim=C.D_MODEL,
+    time_dim=128, charge_dim=8)
 
 optimizer = torch.optim.AdamW(
     model.parameters(),
@@ -246,7 +251,6 @@ with h5py.File(C.TRAIN_PATH, "r") as f:
                 batch["pep_seq"],
                 batch["charge"],
             )
-
             loss = masked_mse_loss(u_pred, target, batch["mask"])
             loss.backward()
             optimizer.step()

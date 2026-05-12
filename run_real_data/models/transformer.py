@@ -12,10 +12,10 @@ from .tfm_embedding import (
 #     def __init__(self, d_in: int, d_model: int):
 #         super().__init__()
 #         self.projection = nn.Sequential(
-#             nn.Linear(d_in, 64),
-#             nn.GELU(),
-#             nn.Linear(64, d_model),
-#             nn.LayerNorm(d_model),
+#             nn.Linear(d_in, 16),
+#             nn.SiLU(),
+#             nn.Linear(16, 64),
+#             nn.LayerNorm(64),
 #         )
 
 #     def forward(self, noise: torch.Tensor):
@@ -26,9 +26,9 @@ from .tfm_embedding import (
 #     def __init__(self, d_model: int, d_out: int):
 #         super().__init__()
 #         self.projection = nn.Sequential(
-#             nn.Linear(d_model, 64),
-#             nn.GELU(),
-#             nn.Linear(64, d_out),
+#             nn.Linear(d_model, 16),
+#             nn.SiLU(),
+#             nn.Linear(16, 64),
 #         )
 
 #     def forward(self, x: torch.Tensor):
@@ -54,7 +54,7 @@ class Modulation(nn.Module):
         super().__init__()
         self.mod = nn.Sequential(
             nn.Linear(cond_dim, 128),
-            nn.GELU(),
+            nn.SiLU(),
             nn.Linear(128, 6 * d_model),
         )
         self.act = nn.SiLU()
@@ -164,14 +164,11 @@ class DiffusionFlow(nn.Module):
         # init intensity padding mask - > B, L - 1, 1
         intensity_masked = pep_padding_mask[:,1:]
 
-        pep_sum = (pep_tokens * mask).sum(dim=1)  # B, d_model
-        pep_len = mask.sum(dim=1)  # B, 1
-
-        pep_mean = pep_sum / pep_len.clamp(min=1)
+        pep_c = pep_tokens[:, 0, :]  # B, d_model
 
         time_emb = self.time_embedding(time)  # B, time dim
 
-        y_emb = torch.cat([time_emb, pep_mean], dim=-1)  # B, cond_dim
+        y_emb = torch.cat([time_emb, pep_c], dim=-1)  # B, cond_dim
 
         x = noise_tokens
 
