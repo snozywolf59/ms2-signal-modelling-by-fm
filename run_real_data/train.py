@@ -238,9 +238,9 @@ with h5py.File(C.TRAIN_PATH, "r") as f:
             x1 = batch["intensity_latent"]
             noise = torch.randn_like(x1)
 
-            # Với sphere mode, noise phải nằm trên S^(d-1)
-            if preprocessor.mode == PreprocessMode.SPHERE:
-                noise = preprocessor.encode(torch.sigmoid(noise))
+            # # Với sphere mode, noise phải nằm trên S^(d-1)
+            # if preprocessor.mode == PreprocessMode.SPHERE:
+            #     noise = preprocessor.encode(torch.sigmoid(noise))
 
             t = torch.rand(end - start, 1)
             x_t, target = compute_flow_target(noise, x1, t, batch)
@@ -291,5 +291,3 @@ plot_loss_history(loss_history)
 for key, vals in metrics.items():
     if vals:
         plot_loss_history(vals, f"{key.upper()}", f"MLP_{key.upper()}_{C.PREPROCESS_MODE}")
-
-
