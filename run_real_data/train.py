@@ -116,21 +116,21 @@ def compute_flow_target(
 # ────────────────────────────────────────────────────────────
 # Model & Optimizer
 # ────────────────────────────────────────────────────────────
-# model = HCDFlowResMLP(
-#     noise_dim=174,
-#     pep_dim=256,
-#     time_dim=128,
-#     charge_dim=9,
-#     num_blocks=C.MODEL_LAYERS,
-#     num_blocks_pep=C.PEP_LAYERS,
-#     min_charge=1,
-#     max_charge=6,
-# )
-
-model = HCDFlow(
+model = HCDFlowResMLP(
     noise_dim=174,
-    pep_dim=C.D_MODEL,
-    time_dim=128, charge_dim=8)
+    pep_dim=248,
+    time_dim=128,
+    charge_dim=8,
+    num_blocks=C.MODEL_LAYERS,
+    num_blocks_pep=C.PEP_LAYERS,
+    min_charge=1,
+    max_charge=6,
+)
+
+# model = HCDFlow(
+#     noise_dim=174,
+#     pep_dim=C.D_MODEL,
+#     time_dim=128, charge_dim=8)
 
 optimizer = torch.optim.AdamW(
     model.parameters(),
@@ -155,10 +155,10 @@ loss_history: list[float] = []
 rolling_buffer: list[float] = []
 
 metrics: dict[str, list[float]] = {
-    "pcc_mask": [],
-    "sa_mask": [],
-    "pcc_raw": [],
-    "sa_raw": [],
+    "pcc_latent": [],
+    "sa_latent": [],
+    "pcc_true": [],
+    "sa_true": [],
 }
 
 # ────────────────────────────────────────────────────────────
@@ -174,13 +174,14 @@ def _run_validation(
     model.eval()
     with torch.no_grad():
         n = C.VALIDATE_BATCH_SIZE
+        intensity_latent = last_batch["intensity_latent"][:n]
         intensity_01 = last_batch["intensity_01"][:n]
         pep_seq = last_batch["pep_seq"][:n]
         charge = last_batch["charge"][:n]
         mask = last_batch["mask"][:n]
 
         # Noise phù hợp với mode
-        noise = torch.randn_like(intensity_01)
+        noise = torch.randn_like(intensity_latent)
         if prep.mode == PreprocessMode.SPHERE:
             noise = prep.encode(torch.sigmoid(noise))
 
@@ -188,23 +189,23 @@ def _run_validation(
         gen_latent = model.sample(noise, pep_seq, charge, step=C.ODE_STEPS)
         gen_01 = prep.decode(gen_latent)
 
-        score_pcc_mask = pcc(gen_01, intensity_01, mask)
-        score_sa_mask = sa(gen_01, intensity_01, mask)
-        # score_pcc_raw = pcc(gen_01, intensity_01)
-        # score_sa_raw = sa(gen_01, intensity_01)
+        score_pcc_mask = pcc(gen_latent, intensity_latent, mask)
+        score_sa_mask = sa(gen_latent, intensity_latent, mask)
+        score_pcc_raw = pcc(gen_01, intensity_01, mask)
+        score_sa_raw = sa(gen_01, intensity_01, mask)
 
-        metrics["pcc_mask"].append(score_pcc_mask[0])
-        metrics["sa_mask"].append(score_sa_mask[0])
-        # metrics["pcc_raw"].append(score_pcc_raw[0])
-        # metrics["sa_raw"].append(score_sa_raw[0])
+        metrics["pcc_latent"].append(score_pcc_mask[0])
+        metrics["sa_latent"].append(score_sa_mask[0])
+        metrics["pcc_true"].append(score_pcc_raw[0])
+        metrics["sa_true"].append(score_sa_raw[0])
 
         if n_logs % C.PRINT_SCORE_EVERY_N_LOGS == 0:
             print(
                 f"\n[cyan]── Validation (log #{n_logs}) ──[/cyan]\n"
-                f"  PCC Mask : {score_pcc_mask[0]:.4f}\n"
-                f"  SA  Mask : {score_sa_mask[0]:.4f}\n"
-                # f"  PCC Raw  : {score_pcc_raw[0]:.4f}\n"
-                # f"  SA  Raw  : {score_sa_raw[0]:.4f}"
+                f"  PCC latent : {score_pcc_mask[0]:.4f}\n"
+                f"  SA  latent : {score_sa_mask[0]:.4f}\n"
+                f"  PCC true   : {score_pcc_raw[0]:.4f}\n"
+                f"  SA  true : {score_sa_raw[0]:.4f}"
             )
     model.train()
 

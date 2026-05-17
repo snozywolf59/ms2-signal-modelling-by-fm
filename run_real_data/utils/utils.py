@@ -62,7 +62,7 @@ def plot_loss_history(loss_history, title ="Loss History", prefix="Loss_History"
 
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
-    plt.title("Training Loss History")
+    plt.title(title)
     plt.savefig(f"{prefix}_{time()}.jpg")
     plt.show()
 
@@ -242,7 +242,7 @@ def process_intensity_vector(
 
     if isinstance(intensity_vector, torch.Tensor):
         if reshape:
-            return intensity_vector.reshape(batch_size, 29, 6)
+            return intensity_vector.reshape(batch_size, 29, 6).clamp()
         return intensity_vector
 
     elif isinstance(intensity_vector, np.ndarray):

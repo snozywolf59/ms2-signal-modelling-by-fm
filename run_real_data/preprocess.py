@@ -82,7 +82,23 @@ class Preprocessor:
             return z.clamp(0.0, 1.0)
 
         elif self.mode == PreprocessMode.LOGIT:
-            return torch.sigmoid(z)
+            # nếu <= self.logit_eps thì về 0, nếu >= self.logit_eps thì về 1.
+            x = torch.sigmoid(z)
+
+            # recover exact boundary
+            x = torch.where(
+                x <= self.logit_eps,
+                torch.zeros_like(x),
+                x
+            )
+
+            x = torch.where(
+                x >= 1.0 - self.logit_eps,
+                torch.ones_like(x),
+                x
+            )
+
+            return x
 
         elif self.mode == PreprocessMode.SPHERE:
             # Project về [0,1]: sigmoid từng chiều sau khi unnorm
