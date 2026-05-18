@@ -116,47 +116,99 @@ class TfmEmbedding(nn.Module):
         num_blocks_pep=6,
     ):
         super().__init__()
-        # self.charge_embedding = nn.Linear(1, charge_dim)
+
         self.charge_dim = charge_dim
         self.time_dim = time_dim
         self.pep_dim = pep_dim
 
-        self.pep_embedding = nn.Embedding(23, pep_dim, padding_idx=0)
+        self.pep_embedding = nn.Embedding(
+            23,
+            pep_dim,
+            padding_idx=0
+        )
+
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=pep_dim + charge_dim, nhead=8, dim_feedforward=1024, batch_first=True
+            d_model=pep_dim,
+            nhead=8,
+            dim_feedforward=1024,
+            batch_first=True,
         )
+
         self.transformer = nn.TransformerEncoder(
-            encoder_layer, num_layers=num_blocks_pep
+            encoder_layer,
+            num_layers=num_blocks_pep,
         )
+
         self.charge_embedding = ChargeEmbedding(
-            min_charge, max_charge, charge_dim
+            min_charge,
+            max_charge,
+            charge_dim,
         )
 
     def forward(
-        self, seq: torch.Tensor, charge: torch.Tensor, time: torch.Tensor
+        self,
+        seq: torch.Tensor,
+        charge: torch.Tensor,
+        time: torch.Tensor,
     ):
-        # add cls token
-        # cls token id = 22
+        # add CLS token
+        # CLS token id = 22
         seq = torch.cat(
-            [torch.full((seq.size(0), 1), 22, dtype=torch.long, device=seq.device), seq], dim=1
-        )  # B, L+1
-        mask = (seq == 0) # B, L
-        charge_emb = self.charge_embedding(charge).unsqueeze(1).expand(-1, seq.size(1), -1)
-        x = torch.cat([self.pep_embedding(seq), charge_emb], dim=-1) + sinusoidal_position_encoding(
-            seq.size(1), self.pep_dim + self.charge_dim
-        ).unsqueeze(0) # B, L, d_model
+            [
+                torch.full(
+                    (seq.size(0), 1),
+                    22,
+                    dtype=torch.long,
+                    device=seq.device,
+                ),
+                seq,
+            ],
+            dim=1,
+        )  # (B, L+1)
+
+        # padding mask
+        mask = (seq == 0)  # (B, L+1)
+
+        # peptide embedding
+        x = self.pep_embedding(seq)
+
+        # positional encoding
+        pos = sinusoidal_position_encoding(
+            seq.size(1),
+            self.pep_dim,
+        ).unsqueeze(0).to(seq.device)
+
+        x = x + pos
+
+        # mask padded tokens
         x = x.masked_fill(
             mask.unsqueeze(-1),
             0.0,
         )
-        x = self.transformer(x, src_key_padding_mask=mask)
 
-        pep_c = x[:, 0, :]
-        # charge_emb = sinusoidal_time_embedding(charge, self.charge_dim)
-        
-        time_emb = sinusoidal_time_embedding(time, self.time_dim)
-        # print(pep_c.shape, charge_emb.shape, time_emb.shape)
-        return torch.cat([pep_c, time_emb], dim=-1)
+        # transformer encoder
+        x = self.transformer(
+            x,
+            src_key_padding_mask=mask,
+        )
+
+        # CLS representation
+        pep_c = x[:, 0, :]  # (B, pep_dim)
+
+        # charge embedding
+        charge_emb = self.charge_embedding(charge)  # (B, charge_dim)
+
+        # time embedding
+        time_emb = sinusoidal_time_embedding(
+            time,
+            self.time_dim,
+        )  # (B, time_dim)
+
+        # final conditioning vector
+        return torch.cat(
+            [pep_c, charge_emb, time_emb],
+            dim=-1,
+        )
 
 
 

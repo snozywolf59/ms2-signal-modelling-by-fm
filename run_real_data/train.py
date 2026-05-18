@@ -118,7 +118,7 @@ def compute_flow_target(
 # ────────────────────────────────────────────────────────────
 model = HCDFlowResMLP(
     noise_dim=174,
-    pep_dim=248,
+    pep_dim=256,
     time_dim=128,
     charge_dim=8,
     num_blocks=C.MODEL_LAYERS,

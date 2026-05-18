@@ -52,7 +52,7 @@ ADAM_EPS: float = 1e-8
 SIGMA: float = 1e-5
 
 # Bước ODE khi sample
-ODE_STEPS: int = 4
+ODE_STEPS: int = 6
 
 # ─── Logging ────────────────────────────────────────────────
 # Tổng hợp loss mỗi bao nhiêu batch
