@@ -42,8 +42,8 @@ COND_DROP_PROB: float = 0.1
 
 # training configuration
 
-EPOCHS: int = 4
-BATCH_SIZE: int = 256
+EPOCHS: int = 8
+BATCH_SIZE: int = 512
 LR: float = 1e-3
 WEIGHT_DECAY: float = 1e-4
 ADAM_EPS: float = 1e-8

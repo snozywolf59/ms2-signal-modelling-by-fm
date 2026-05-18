@@ -46,7 +46,7 @@ def pcc(intensity_1, intensity_2, mask=None):
     )
 
     pcc_values = numerator / denominator  # Shape: (B,)
-    return pcc_values.mean().item(), pcc_values.min().item()
+    return pcc_values.mean().item(), pcc_values
 
 
 def l1(intensity_1: torch.Tensor, intensity_2: torch.Tensor):
@@ -79,4 +79,4 @@ def sa(intensity_1, intensity_2, mask=None):
 
     sa_values = dot_product / (norm_1 * norm_2 + eps)  # Shape: (B,)
 
-    return sa_values.mean().item(), sa_values.min().item()
+    return sa_values.mean().item(), sa_values
