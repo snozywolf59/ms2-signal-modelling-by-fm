@@ -44,12 +44,12 @@ COND_DROP_PROB: float = 0.1
 
 EPOCHS: int = 8
 BATCH_SIZE: int = 512
-LR: float = 1e-3
-WEIGHT_DECAY: float = 1e-4
+LR: float = 3e-4
+WEIGHT_DECAY: float = 1e-2
 ADAM_EPS: float = 1e-8
 
 # Flow matching sigma (noise schedule)
-SIGMA: float = 1e-5
+SIGMA: float = 1e-2
 
 # Bước ODE khi sample
 ODE_STEPS: int = 6
