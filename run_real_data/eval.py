@@ -42,16 +42,12 @@ from utils.utils import (
 
 console = Console()
 
-# ════════════════════════════════════════════════════════════
-# CONFIG  ← chỉnh ở đây
-# ════════════════════════════════════════════════════════════
-HOLDOUT_PATH = r"E:\Dai hoc\2526I\dacn\flow-matching\data\holdout_hcd.hdf5"
-MODEL_PATH   = ""            # đường dẫn tới file .pth
+HOLDOUT_PATH = C.TEST_PATH
+MODEL_PATH   = ""            #  file .pth path
 
-K            = 8             # số sample cho best-of-K và mean
-EVAL_BATCH   = 64            # batch size khi chạy inference
+K            = 8             # K-samples for best-of-K and mean
+EVAL_BATCH   = 64            # batch size when inference
 ODE_STEPS    = C.ODE_STEPS
-# ════════════════════════════════════════════════════════════
 
 torch.set_default_dtype(torch.float64)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -139,15 +135,23 @@ GROUPS: dict[str, dict[str, np.ndarray]] = {
 # ────────────────────────────────────────────────────────────
 # Load model
 # ────────────────────────────────────────────────────────────
-# Đổi sang HCDFlowResMLP nếu cần
-model = HCDFlow(noise_dim=174, pep_dim=C.D_MODEL, time_dim=128, charge_dim=8)
+model = HCDFlowResMLP(
+    noise_dim=174,
+    pep_dim=256,
+    time_dim=128,
+    charge_dim=8,
+    num_blocks=C.MODEL_LAYERS,
+    num_blocks_pep=C.PEP_LAYERS,
+    min_charge=1,
+    max_charge=6,
+)
 model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
 model.eval()
 print(f"[bold]Model params:[/bold] {sum(p.numel() for p in model.parameters()):,}")
 
 
 # ────────────────────────────────────────────────────────────
-# Core inference — 1 pass, thu scores per-peptide cho cả 3 method
+# Core inference
 # ────────────────────────────────────────────────────────────
 class PerPeptideScores(NamedTuple):
     single_pcc: np.ndarray   # (n_unique,)

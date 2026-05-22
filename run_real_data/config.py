@@ -1,12 +1,4 @@
-"""
-=============================================================
-  CONFIG — chỉnh tất cả hyperparameter và preprocessing ở đây
-=============================================================
-
-PREPROCESS_MODE choices:
-  "raw"       — giữ nguyên intensity [0,1], không transform
-  "logit"     — logit transform: log(x/(1-x)), đưa về R
-  "sphere"    — L2-normalize lên unit sphere S^(d-1) trong R^d
+"""Configuration for training and evaluation on real data.
 """
 
 import os
@@ -14,29 +6,30 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# ─── Data ───────────────────────────────────────────────────
+# Data Path
 TRAIN_PATH: str = os.getenv("TRAIN_PATH", "data/train.h5")
+TEST_PATH: str = os.getenv("TEST_PATH", "data/test.h5")
 
-# ─── Preprocessing ──────────────────────────────────────────
-# Chọn một trong: "raw" | "logit" | "sphere"
-PREPROCESS_MODE: str = "logit"
+# Preprocessing for spectra
+# "raw" | "logit"
+PREPROCESS_MODE: str = "raw"
 
-# Dùng cho mode "logit"
+# use for logit mode: clamp intensity in [LOGIT_EPS, 1 - LOGIT_EPS]
 LOGIT_EPS: float = 1e-4
 
-# Dùng cho mode "sphere": clamp trước khi normalize
+# use for sphere projection: work in progress
 SPHERE_EPS: float = 1e-8
 
-# ─── Model ──────────────────────────────────────────────────
+# Model architecture params
 D_NOISE: int = 6
 D_MODEL: int = 256
 MODEL_LAYERS: int = 4
 PEP_LAYERS: int = 4
 
-# ─── Training ───────────────────────────────────────────────
+# Training params
 TRAIN_SAMPLE_SIZE: int = -1
 
-# CFG Scaling
+# CFG Scaling - in progress
 GUIDANCE_SCALE: float = 3.0
 COND_DROP_PROB: float = 0.1
 
@@ -51,18 +44,15 @@ ADAM_EPS: float = 1e-8
 # Flow matching sigma (noise schedule)
 SIGMA: float = 1e-2
 
-# Bước ODE khi sample
+# ODE steps when sampling
 ODE_STEPS: int = 6
 
-# ─── Logging ────────────────────────────────────────────────
-# Tổng hợp loss mỗi bao nhiêu batch
+# logging while training config
 LOG_EVERY_N_BATCHES: int = 100
 
-# Validate mỗi bao nhiêu lần log
-VALIDATE_EVERY_N_LOGS: int = 100
+# Validation config, by pcc and sa on latent and true spectra
+VALIDATE_EVERY_N_LOGS: int = 50
 
-# In score ra console mỗi bao nhiêu lần log
 PRINT_SCORE_EVERY_N_LOGS: int = 1
 
-# Số sample dùng cho validation
 VALIDATE_BATCH_SIZE: int = 16

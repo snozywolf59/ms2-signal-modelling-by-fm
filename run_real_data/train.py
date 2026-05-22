@@ -1,12 +1,9 @@
-"""
-train.py
-────────
-Training script chính. Mọi hyperparameter và preprocessing mode
-đều đặt trong config.py — không cần sửa file này.
+""" Run model training.
 
-Chạy:
-    python train.py
+All configuration is in config.py. To change model architecture,
+edit models.py and import the desired class here.
 """
+
 
 import math
 import os
@@ -94,16 +91,16 @@ def compute_flow_target(
     t: torch.Tensor,
     batch: dict,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """
-    Tính x_t và velocity target tuỳ theo preprocessing mode.
+    """compute the ground truth flow
 
-    Euclidean (raw/logit):
-        x_t  = (1 - t) * noise + t * x1   [linear interpolation]
-        u*   = x1 - noise                  [constant vector field]
+    Args:
+        noise (torch.Tensor): the gaussian noise
+        x1 (torch.Tensor): the spectra
+        t (torch.Tensor): random time
+        batch (dict): batcch information
 
-    Sphere:
-        x_t  = SLERP(noise, x1, t)        [geodesic interpolation]
-        u*   = Log_{x_t}(x1) / (1-t)      [tangent vector field]
+    Returns:
+        tuple[torch.Tensor, torch.Tensor]: x_t, target u
     """
     if preprocessor.mode == PreprocessMode.SPHERE:
         x_t, target = preprocessor.sphere_target_vector(noise, x1, t)
@@ -162,7 +159,7 @@ metrics: dict[str, list[float]] = {
 }
 
 # ────────────────────────────────────────────────────────────
-# Validation (tách hàm để train loop gọn)
+# Validation function
 # ────────────────────────────────────────────────────────────
 def _run_validation(
     model: torch.nn.Module,

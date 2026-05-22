@@ -30,6 +30,7 @@ PROSIT_ALHABET = {
     "V": 18,
     "W": 19,
     "Y": 20,
+    "M(ox)": 21,
 }
 PROSIT_INDEXED_ALPHABET = {i: c for c, i in PROSIT_ALHABET.items()}
 
@@ -40,7 +41,12 @@ def get_peptide_seq(integer_seq):
     )
 
 
-def plot_loss_history(loss_history, title ="Loss History", prefix="Loss_History", smooth_window=None):
+def plot_loss_history(
+    loss_history,
+    title="Loss History",
+    prefix="Loss_History",
+    smooth_window=None,
+):
     """
     Plot training loss history.
 
@@ -237,7 +243,7 @@ def process_intensity_vector(
     batch_size = intensity_vector.shape[0]
     if intensity_vector.shape[-1] != 174:
         raise ValueError("Input vector must have length 174")
-    
+
     # intensity_vector[intensity_vector < 0] = 0
 
     if isinstance(intensity_vector, torch.Tensor):
