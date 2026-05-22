@@ -75,6 +75,8 @@ python run_real_data/eval.py
 
 ---
 
+The example result in: run_real_data\train-test-hcd-001 (2).ipynb
+
 # Repository Structure
 
 ```text
